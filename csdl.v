@@ -43,8 +43,18 @@ Variable cells : nat -> Set.
 Definition lift_const {t : ty} (c : nat) `{r : Representable t c} : const t :=
   representation t c.
 
-Instance: Have (w > n) -> Have (w > 0).
-Proof. unfold Have ; intros ; omega. Qed.
+(* Instance: Have (w > n) -> Have (w > 0). *)
+(* Proof. unfold Have ; intros ; omega. Qed. *)
+
+(* Goal Have (2 > 0). *)
+(*   progress eapply @Have_instance_0. *)
+(*   progress eapply @Have_instance_0. *)
+(*   progress eapply @Have_instance_0. *)
+(*   progress eapply @Have_instance_0. *)
+(*   progress eapply @Have_instance_0. *)
+
+
+
 
 Inductive exp : ty -> Set :=
 | CONST {n : ty} (c : const n) : exp n
@@ -98,84 +108,10 @@ Definition bind {A B} (x : interpM A) (y : A -> interpM B) : interpM B :=
 
 Axiom cheat : Π {α}, α.
 
-Definition binary_plus {n} (x y : bits n) : bits n * overflow.
-Admitted.
-Print mult.
-(* Program Fixpoint mem_cell_fetch_q (sp : space) (e : const (space_address sp)) (offset : nat) (m : mem) :  *)
-(*   option (const (offset * space_cell_size sp)) := *)
-(*   mem_cell_fetches m sp e offset.   *)
 
+Notation " ( x &? ) " := (exist _ x _).
 
-(*   match offset return option (bits (S offset * space_cell_size sp)) with *)
-(*     | 0 => Nonemem_cell_fetches m sp e *)
-(*     | S n =>  *)
-(*       vector_append (mem_cell_fetch_q sp e n m) (mem_cell_fetches m sp (binary_plus e (space_cell_size sp))) *)
-(*   end. *)
-
-Theorem euclid_unique : 
- forall a b `(Have (b > 0)) q r, q > r -> a = b * q + r -> r = modulo_nat a b.
-Admitted.
-
-Lemma quotient_cancel : forall x y `{Have (y > 0)}, modulo_nat x y = 0 -> quotient_nat x y * y = x.
-Admitted.
-(* Proof. intros. unfold quotient_nat.  *)
-(*   unfold modulo_nat in H0. destruct_call modulo. *)
-(*   simpl in *. subst. *)
-(*   destruct e as [q [ Hq Hy'] ]. *)
-(*   pose (euclid_unique x y H q 0). *)
-
-Require Import Le.
-Definition ltb (x y : nat) := leb (S x) y.
-
-Program Fixpoint euclid (n : nat) (m : nat) `{Have (m > 0)} {wf lt n} : nat * nat :=
-  match ltb n m with
-    | true => (0, n)
-    | false => let '(q, r) := euclid (n - m) m in
-      (S q, r)
-  end.
-
-Lemma minus_n_n n : n - n = 0. 
-Proof. induction n; simpl; auto. Defined.
-
-Lemma minus_n_O n : n - O = n. 
-Proof. induction n; simpl; auto. Defined.
-
-Lemma lt_n_S_n n : n < S n.
-Proof. induction n; simpl; auto. Defined.
-
-Lemma lt_trans n m p : n < m -> m < p -> n < p.
-Proof. induction 1; simpl; intros. induction H ; auto. 
-  apply IHle. inversion H0.
-
-
-
-Print Opaque Dependencies minus_n_n. 
-
-  Next Obligation.
-    unfold ltb in *.
-    symmetry in Heq_anonymous.
-    simpl in Heq_anonymous. destruct m. inversion H.
-    clear euclid. unfold Have in *.
-    clear H.
-    revert m Heq_anonymous. induction n; simpl in *; intros. discriminate.
-    destruct m. rewrite minus_n_O. constructor.
-    pose (IHn m Heq_anonymous). 
-    
-
-    Print leb_complete_conv.
-    apply leb_complete_conv in Heq_anonymous. omega. 
-  Defined.
-
-  Next Obligation. auto with *. Defined.
-
-(* induction Heq_anonymous. rewrite minus_n_n. *)
-(*     red. induction m ; simpl ; auto. *)
-(*     simpl. clear. induction m; simpl. *)
-    
-(*     constructor. *)
-(*     inversion H. si *)
-
-Eval lazy beta delta iota zeta in (euclid 8 2).
+Notation " ( x & p ) " := (existT _ x p).
 
 Definition mem_cell_fetches_agg {w} (m : mem) (e : endianness) (sp : space) (e : const sp.(space_address)) 
   `(wgtn : Have (w > sp.(space_cell_size))) `(Have (sp.(space_cell_size) > 0)) 
@@ -186,19 +122,10 @@ Definition mem_cell_fetches_agg {w} (m : mem) (e : endianness) (sp : space) (e :
   unfold space_descr in fetch.
   set (q := quotient_nat w (space_cell_size sp)).
   pose (fetch e0 q).
-  subst q. rewrite quotient_cancel in o. exact o.
+  subst q. 
+  rewrite quotient_cancel in o. exact o.
   assumption.
 Defined.
-
-(* Equations mem_cell_fetches_agg {w} (e : endianness) (sp : space) (e : const sp.(space_address)) *)
-(*   `(wgtn : Have (w > sp.(space_cell_size)))  *)
-(*   `(cellgt0 : Have (sp.(space_cell_size) > 0)) *)
-(*   `(wmultn : Have (modulo_nat w sp.(space_cell_size) = 0)) : *)
-(*   option (const w) := *)
-(* mem_cell_fetches_agg w endian sp e wgtn spgt0 wmultn := *)
-
-(* Definition mem_cell_fetches_agg {n w} (e : endianness) (sp : space) (e : exp sp.(space_address))  *)
-(*   `(wgtn : Have (w > n)) `(wmultn : Have (modulo_nat w n = 0)) : option (const n) := *)
   
 Fixpoint eval_fetch {n} (l : location n) : interpM (const n) :=
   match l in location n return interpM (const n) with
@@ -252,19 +179,6 @@ Proof. intros. trivial. Qed.
 Lemma eval_app_cons {t : ty} {l : list ty} (e : exp t) (es : args l) {n : ty} (o : type_of_op (t :: l) n) : 
   eval_app (ARGcons e es) o = bind (eval_exp e) (fun e' => eval_app es (o e')).
 Proof. intros. trivial. Qed.
-
-
-
-
-(* Equations(nocomp) eval_fetch {n} (l : location n) : interpM (const n) := *)
-(* eval_fetch w (AGG n w e (CELL num addr n sp e) wgtn wmultn) := *)
-(*   bind (eval_exp e) (fun (c : const addr) mem => *)
-(*     (mem_cell_fetches mem sp c w, mem)). *)
-
-(* Equations(nocomp) eval_exp {n} (e : exp n) : interpM (const n) := *)
-(* eval_exp n (CONST n c) := ret c ; *)
-(* eval_exp n (FETCH n l) := fetch l ; *)
-(* eval_exp n (APP l n o args) := cheat. *)
 
 Equations(nocomp) binary_eq {n} (x y : const n) : bool :=
 binary_eq ?(0) Vnil Vnil := true ;

@@ -4,12 +4,6 @@ Definition bit := bool.
 Definition bits (n : nat) := vector bit n.
 Definition overflow := bool.
 
-Program Definition modulo_nat (n m : nat) `{Have (m > 0)} : nat :=
-  modulo m _ n.
-
-Program Definition quotient_nat (n m : nat) `{Have (m > 0)} : nat :=
-  quotient m _ n.
-
 Equations(nocomp) div2_rest (n : nat) : nat * bit :=
 div2_rest O := (0, false) ;
 div2_rest (S O) := (0, true) ;

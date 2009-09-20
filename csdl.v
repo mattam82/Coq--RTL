@@ -84,7 +84,7 @@ Inductive effect : Set :=
 Inductive guarded : Set :=
 | GUARD {n} (e : exp n) (ef : effect).
 
-Inductive rtl := RTL (l : list guarded).
+Definition rtl := list guarded.
 
 Definition cell_name := string.
 
@@ -190,29 +190,101 @@ binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
 (* binary_eq ?(S n) (Vcons false n x) (Vcons false n y) := if binary_eq x y then in_left else in_right ; *)
 (* binary_eq ?(S n) (Vcons a n _) (Vcons b n _) := in_right. *)
 
-About mem_cell_fetches. Print space_descr.
+Require Import EquivDec Bool.
+Instance space_eq : EqDec space eq.
+Admitted.
 
+Lemma bool_eq_refl b : bool_eq b b = true.
+Proof. destruct b ; reflexivity. Qed.
+
+Lemma binary_eq_refl n (b : const n) : binary_eq b b = true.
+Proof. intros. remember b as b'. rewrite Heqb' at 1. funind (binary_eq b b') foo. 
+  rewrite bool_eq_refl. rewrite IHbinary_eq_ind. reflexivity.
+  simp binary_eq in foo. rewrite bool_eq_refl in foo. assumption.
+Qed.
+
+Instance const_eq : EqDec (const n) eq.
+Proof. 
+intros n. red. intros. case_eq (binary_eq x y) ; [ left | right ].
+
+  funind (binary_eq x y) foo. reflexivity.
+  red. rewrite andb_true_iff in x. destruct x.
+  specialize (IHbinary_eq_ind H1).
+  apply bool_eq_ok in H. subst.
+  simp binary_eq in foo. rewrite bool_eq_refl in foo. 
+  specialize (IHbinary_eq_ind foo). congruence.
+
+  funind (binary_eq x y) foo. red ; intros.
+  red in H. noconf H. simp binary_eq in foo.
+  rewrite bool_eq_refl, binary_eq_refl in foo.
+  simpl in foo. discriminate.
+Qed.
+  
 Definition coerce_bits {n m} (c : bits n) (H : n = m) : bits m.
-intros ; subst. exact c. Defined.
+Proof. intros ; subst. exact c. Defined.
 
-Equations mem_cell_update (m : mem) {n a w} (sp : space n a w) (e : const a) (c : const w) : mem :=
-mem_cell_update (mkMem m) n a w sp e c := 
-  let mem' n' a' w' (sp' : space n' a' w') (t : ty) (e' : const a') := 
-    if eq_nat_dec a a' then
-      if binary_eq e (coerce_bits e' _) then 
-        Some (coerce_bits c _)
-      else None
-    else m n' a' w' sp' t e' in mkMem mem'.
+Equations(nocomp) vector_firstn {A} {l : nat} (s : nat) (c : vector A l) (Hsl : s < l) : vector A s :=
+vector_firstn A ?(O) s Vnil Hsl :=! Hsl ;
+vector_firstn A ?(S n) O (Vcons a n v) Hsl := Vnil ;
+vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
 
-  Next Obligation. Defined.
-  Next Obligation.   Defined.
+  Next Obligation. omega. Defined.
 
+  Next Obligation. revert s Hsl ; induction c ; intros ;
+    simp vector_firstn ; auto with * ; destruct s ; simp vector_firstn.
+  Defined.
+
+Require Import Morphisms SetoidTactics.
   
-Equations eval_store {n} (l : location n) (c : const n) : interpM () :=
-eval_store n (AGG n w endian (CELL num a w sp e) wgtn wmultn) := 
-  bind (eval_exp e) (fun e' : const a =>
-    fun mem => ((), mem_cell_update mem sp e' c))
+Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space) (addr : const sp.(space_address)) 
+  (c : option (const w))
+  `{wgtn : Have (w > sp.(space_cell_size))} `{Have (sp.(space_cell_size) > 0)}
+  `{wmultn : Have (modulo_nat w sp.(space_cell_size) = 0)} : mem.
+  intros.
+  pose (fetch := mem_cell_fetches m sp).
+  unfold space_descr in fetch.
+  set (q := quotient_nat w (space_cell_size sp)).
+  constructor.
+  intros sp' addr' agg.
+  destruct_equiv sp sp'.
+
+    destruct_equiv addr addr'.
+    
+      destruct (compare_dec agg q).
+
+      (* LT *) assert(Haggw:agg * sp'.(space_cell_size) < w).
+      subst q. replace w with (quotient_nat w sp'.(space_cell_size) * sp'.(space_cell_size)).
+      unfold Have in *. now apply mult_lt_compat. now rewrite quotient_cancel.
+      destruct c.
+        exact (Some (vector_firstn _ c Haggw)).
+        exact None.
+
+      (* EQ *)
+      subst agg q. rewrite quotient_cancel. exact c.
+      assumption.
+
+      (* GT *)
+      set(w' := agg * sp'.(space_cell_size)).
+      pose (@mem_cell_fetches_agg w' m BigEndian sp' addr').
+      exploit o. clear o. subst w'. unhave. red. 
+      assert(q > 1). subst q. now apply quotient_gt_1.
+      red in H0. rewrite l in H0. 
+      setoid_replace sp'.(space_cell_size) with (1 * sp'.(space_cell_size)) at 1; [| unfold ty; omega].
+      now apply mult_lt_compat.
+      
+      subst w'. rewrite modulo_cancel. reflexivity. 
+      intros cst. exact cst.
+
+      (** Addresses don't match, but may still be part of the aggregate! *)
+      apply (fetch addr' agg).
+
+      apply (mem_cell_fetches m sp' addr' agg).
+Defined.
   
+Equations eval_store {n} (l : location n) (c : option (const n)) : interpM () :=
+eval_store n (AGG w endian sp e wgtn wmultn) c := 
+  bind (eval_exp e) (fun e' =>
+    fun mem => (Some (), mem_cell_store_agg mem endian sp e' c)).
 
 Equations(nocomp) apply_effect (e : effect) : interpM () := 
 apply_effect (STORE n dst src) :=
@@ -229,6 +301,14 @@ Definition one_guarded (g : guarded) : interpM () :=
       if binary_eq e' one_binary_le then
         apply_effect ef
        else ret ()).
+
+Definition seq (x y : interpM ()) :=
+  bind x (Basics.const y).
+
+Definition eval_rtl (r : rtl) : interpM () :=
+  fold_left (fun acc g => seq acc (one_guarded g)) r (ret ()).
+
+
 
 
 

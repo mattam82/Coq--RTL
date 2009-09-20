@@ -85,6 +85,9 @@ Fixpoint binary_of_nat_be (t : nat) (c : nat) : option (bits t) :=
             else Some m'
       end
   end.
+
+Definition one_binary_le {n : nat} : bits n :=
+  fst (bits_succ _ (constant_vector n false)).
     
 (*
 Equations(nostruct) binary_of_nat (t : nat) (c : nat) : option (bits t) :=
@@ -164,6 +167,7 @@ Hint Extern 4 (Representable ?t ?c) => exact (mkRepresentable t c _ eq_refl) : t
   (* end *)
 
 Implicit Arguments representation [ [Representable] ].
+
 Eval compute in (representation 3 7).
 (* Eval compute in (representation 3 8). *)
 
@@ -251,3 +255,47 @@ Proof with auto with *.
 
   now rewrite H in *.
 Qed.
+
+(** Binary equality *)
+
+Equations(nocomp) binary_eq {n} (x y : bits n) : bool :=
+binary_eq ?(0) Vnil Vnil := true ;
+binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
+
+Lemma binary_eq_refl n (b : bits n) : binary_eq b b = true.
+Proof. intros. remember b as b'. rewrite Heqb' at 1. funind (binary_eq b b') foo. 
+  rewrite bool_eq_refl. rewrite IHbinary_eq_ind. reflexivity.
+  simp binary_eq in foo. rewrite bool_eq_refl in foo. assumption.
+Qed.
+
+Instance const_eq : EqDec (bits n) eq.
+Proof. 
+intros n. red. intros. case_eq (binary_eq x y) ; [ left | right ].
+
+  funind (binary_eq x y) foo. reflexivity.
+  red. rewrite andb_true_iff in x. destruct x.
+  specialize (IHbinary_eq_ind H1).
+  apply bool_eq_ok in H. subst.
+  simp binary_eq in foo. rewrite bool_eq_refl in foo. 
+  specialize (IHbinary_eq_ind foo). congruence.
+
+  funind (binary_eq x y) foo. red ; intros.
+  red in H. noconf H. simp binary_eq in foo.
+  rewrite bool_eq_refl, binary_eq_refl in foo.
+  simpl in foo. discriminate.
+Qed.
+  
+Definition coerce_bits {n m} (c : bits n) (H : n = m) : bits m.
+Proof. intros ; subst. exact c. Defined.
+
+Equations(nocomp) vector_firstn {A} {l : nat} (s : nat) (c : vector A l) (Hsl : s < l) : vector A s :=
+vector_firstn A ?(O) s Vnil Hsl :=! Hsl ;
+vector_firstn A ?(S n) O (Vcons a n v) Hsl := Vnil ;
+vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
+
+  Next Obligation. omega. Defined.
+
+  Next Obligation. revert s Hsl ; induction c ; intros ;
+    simp vector_firstn ; auto with * ; destruct s ; simp vector_firstn.
+  Defined.
+  

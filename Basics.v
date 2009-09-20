@@ -1,13 +1,14 @@
 Require Export Arith Program Equations Have Morphisms EquivDec.
+Require Export Relation_Definitions.
 
 Hint Extern 4 => discriminates : core.
 
 Ltac simpdep := reverse ; simplify_dep_elim ; simplify_IH_hyps.
 
+Lemma bool_eq_refl b : bool_eq b b = true.
+Proof. destruct b ; reflexivity. Qed.
+
 Definition ltb (x y : nat) := leb (S x) y.
-
-
-Require Import Relation_Definitions.
 
 Class StrictOrder `(Equivalence A eqA) (ordA : relation A) :=
   { StrictOrder_trans :> Transitive ordA ;

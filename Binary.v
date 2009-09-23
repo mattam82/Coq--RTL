@@ -1,8 +1,29 @@
 Require Export CSDL.Basics Bvector List Arith Euclid.
 
+Inductive endianness := BigEndian | LittleEndian.
+
+Definition overflow := bool.
+
+Class Binary (en : endianness) (T : Type) := {
+  bin_size : T -> nat ;
+  
+  bin_of_nat : nat -> option T ;
+  nat_of_bin : T -> nat ;
+  nat_of_bin_of_nat : forall n t, bin_of_nat n = Some t -> nat_of_bin t = n ;
+  bin_of_nat_of_bin : forall t, bin_of_nat (nat_of_bin t) = Some t ;
+
+  bin_succ : T -> T * overflow;
+  bin_succ_correct : forall t t', bin_succ t = (t', false) -> 
+    nat_of_bin t' = S (nat_of_bin t) ;
+
+  bin_plus : T -> T -> T * overflow;
+  bin_plus_correct : forall t t' tt', bin_plus t t' = (tt', false) ->
+    nat_of_bin tt' = nat_of_bin t + nat_of_bin t'
+
+}.
+
 Definition bit := bool.
 Definition bits (n : nat) := vector bit n.
-Definition overflow := bool.
 
 Equations(nocomp) div2_rest (n : nat) : nat * bit :=
 div2_rest O := (0, false) ;
@@ -48,9 +69,9 @@ Hint Extern 4 => progress (unfold hide_pattern in *) : Below.
 
 Fixpoint binary_of_nat_le (t : nat) (c : nat) : option (bits t) :=
   match c with
-    | 0 => match t with 
+    | 0 => match t with
              | 0 => None
-             | S n => Some (constant_vector (S n) false)
+             | _ => Some (constant_vector t false)
            end
     | 1 => match t with 
              | 0 => None
@@ -68,7 +89,7 @@ Fixpoint binary_of_nat_le (t : nat) (c : nat) : option (bits t) :=
 
 Fixpoint binary_of_nat_be (t : nat) (c : nat) : option (bits t) :=
   match c with
-    | 0 => match t with 
+    | 0 => match t with
              | 0 => None
              | S n => Some (constant_vector (S n) false)
            end
@@ -233,27 +254,32 @@ Proof with auto with *.
   induction n ; intros...
 Qed.
 
-Lemma nat_of_binary_inverse `{R : Representable t n} : 
-  nat_of_binary_be (representation t n) = n.
-Proof with auto with *.
-  intros. destruct R. generalize dependent t. induction n ; intros...
-  Opaque binary_of_nat_be. simpl.
+Lemma nat_of_binary_inverse n (t : nat) (b : bits t) : binary_of_nat_be t n = Some b ->
+  nat_of_binary_be b = n.
+Proof with auto with *. intros n t b Htb. generalize dependent t. induction n ; intros...
+  Opaque binary_of_nat_be.
 
-  induction t... rewrite binary_of_nat_be_n_O in is_representation0. simpdep.
+  induction t... rewrite binary_of_nat_be_n_O in Htb. simpdep.
   simpl. clear. induction t...
 
   simpl in *. Transparent binary_of_nat_be. simpl in *. destruct n.
   destruct t... simpdep. clear. induction t...
 
-  case_eq (binary_of_nat_be t (S n)); intros.
-  rewrite H in is_representation0.
-  specialize (IHn _ _ H).
+  case_eq (binary_of_nat_be t (S n)); [intros b' Hb'Sn | intros Hb'Sn ].
+  rewrite Hb'Sn in Htb.
+  specialize (IHn _ _ Hb'Sn).
 
-  case_eq (bits_succ_be t b) ; intros.
-  rewrite H0 in *. destruct o... program_simpl.
-  now apply nat_of_binary_bits_succ_be in H0.
+  case_eq (bits_succ_be t b'); intros sb bo Hsb.
+  rewrite Hsb in *. destruct bo... program_simpl.
+  now apply nat_of_binary_bits_succ_be in Hsb.
 
-  now rewrite H in *.
+  now rewrite Hb'Sn in *.
+Qed.
+
+Lemma nat_of_binary_representation `{R : Representable t n} : 
+  nat_of_binary_be (representation t n) = n.
+Proof with auto with *.
+  intros. destruct R. now apply nat_of_binary_inverse.
 Qed.
 
 (** Binary equality *)
@@ -299,3 +325,90 @@ vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
     simp vector_firstn ; auto with * ; destruct s ; simp vector_firstn.
   Defined.
   
+Equations(nocomp) vfold_right {A : nat -> Type} {B} (f : Π n, B -> A n -> A (S n)) (e : A 0) {n} (v : vector B n) : A n := 
+vfold_right A B f e ?(O) Vnil := e ;
+vfold_right A B f e ?(S n) (Vcons hdv n tlv) := 
+  f n hdv (vfold_right f e tlv).
+
+Equations(nocomp) vfold_right2 {A : nat -> Type} {B C} 
+  (f : Π n, B -> C -> A n -> A (S n)) (e : A 0) {n} (v : vector B n) (v' : vector C n) : A n := 
+vfold_right2 A B C f e ?(O) Vnil Vnil := e ;
+vfold_right2 A B C f e ?(S n) (Vcons hdv n tlv) (Vcons hdv' n tlv') := 
+  f n hdv hdv' (vfold_right2 f e tlv tlv').
+
+Definition bits_plus_be {n} (x y : bits n) : bits n * overflow :=
+  vfold_right2 (A:=fun n => (bits n * overflow)%type) (fun n b b' r => 
+    let '(rest, carry) := r in
+    let '(b, carry) := 
+      match b, b' with
+        | true, true => (carry, true) 
+        | false, false => (carry, false)
+        | true, false | false, true => (negb carry, carry)
+      end
+    in (Vcons b rest, carry))
+  (Vnil, false) x y.
+
+Instance: Have (pow_of_2 (S n) > 0).
+Proof. reduce_goal. simp pow_of_2. induction n ; simpl ; omega. Qed.
+
+Lemma bits_plus_be_correct_full n : forall (t t' : bits n) tt' o, bits_plus_be t t' = (tt', o) ->
+  let add' := nat_of_binary_be t + nat_of_binary_be t' in
+    if o then add' >= pow_of_2 n /\ nat_of_binary_be tt' = add' - pow_of_2 n
+    else nat_of_binary_be tt' = add'.
+Proof.
+  intros. revert o H. induction t ; intros ; depelim t' ; try depelim tt'. simpl in *. reflexivity.
+
+  destruct o.
+  unfold bits_plus_be in H.
+  simp vfold_right2 in H.
+  case_eq (bits_plus_be t t'). intros. specialize (IHt _ _ _ H0).
+  unfold bits_plus_be in H0. unfold bit in * ; rewrite H0 in H.
+  clear H0.
+  
+  destruct a. destruct a0 ; noconf H ; program_simpl.
+  assert (add' >= pow_of_2 (S n)) by (subst add'; simpl; omega).
+  split. simpl in H ; omega. destruct a1. program_simpl. rewrite H1.
+  subst add'. omega. subst add'. rewrite IHt. omega.
+
+  assert (add' >= pow_of_2 (S n)) by (subst add'; simpl; omega).
+  split. simpl in H1 ; omega. rewrite H0.
+  subst add'. omega.
+
+  destruct a0 ; noconf H ; program_simpl.
+  assert (add' >= pow_of_2 (S n)) by (subst add'; simpl; omega).
+  split. simpl in H1 ; omega. rewrite H0.
+  subst add'. omega.
+
+  subst add'.
+  unfold bits_plus_be in H. simp vfold_right2 in H.
+  case_eq (bits_plus_be t t'). intros. specialize (IHt _ _ _ H0).
+  unfold bits_plus_be in H0. unfold bit in * ; rewrite H0 in H.
+  clear H0.
+  destruct a ; destruct a0 ; simpl in * ; noconf H ; simpl ; try rewrite IHt ; try omega.
+  destruct a1. program_simpl. rewrite H0. omega.
+  assumption.
+Qed.
+
+Lemma bits_plus_be_correct n : forall (t t' : bits n) tt', bits_plus_be t t' = (tt', false) ->
+  nat_of_binary_be tt' = nat_of_binary_be t + nat_of_binary_be t'.
+Proof.
+  intros. apply (bits_plus_be_correct_full _ _ _ _ _ H).
+Qed.
+
+Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
+  bin_size t := S n ;
+  
+  bin_of_nat := binary_of_nat_be (S n);
+  nat_of_bin := nat_of_binary_be;
+
+  bin_succ := bits_succ_be (S n) ;
+
+  bin_plus := bits_plus_be
+}.
+
+  Next Obligation. now apply nat_of_binary_inverse. Qed.
+
+  Next Obligation. Admitted.
+
+  Next Obligation. now erewrite nat_of_binary_bits_succ_be. Qed.
+  Next Obligation. now apply bits_plus_be_correct. Qed.

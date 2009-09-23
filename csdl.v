@@ -1,6 +1,5 @@
 Require Import CSDL.Basics CSDL.Binary String.
 Require Import EquivDec Bool SetoidTactics.
- (* Program Equations Bvector List Arith Euclid Omega. *)
 
 Definition ty := nat.
 Definition const := bits.
@@ -11,14 +10,40 @@ Fixpoint operator (l : list ty) (t : ty) :=
     | t' :: l' => const t' -> operator l' t
   end.
   
-Inductive endianness := BigEndian | LittleEndian.
-
 Record space := mkSpace {
   space_n : option nat;
   space_address : ty;
   space_cell_size : ty;
   space_cell_size_pos : Have (space_cell_size > 0)
 }.
+
+Definition space_descr (sp : space) :=
+  const sp.(space_address) -> forall agg : nat, option (bits (agg * sp.(space_cell_size))).
+
+Definition loc (sp : space) := const sp.(space_address).
+
+Definition aggregate := nat.
+About binary_of_nat_le.
+
+Definition in_space (sp : space) (l : loc sp) (a : aggregate) := 
+  match sp.(space_n) with
+    | None => true
+    | Some n => 
+      match binary_of_nat_le (a * sp.(space_cell_size)) with
+        | Some offset =>
+          let '(l', b) := binary_plus_be l offset in
+            if b then false
+            else binary_leb_be l' (n * sp.(space_cell_size))
+        | None => false
+      end
+  end.
+              
+
+Class SpaceImpl (s : space) :=
+  { space_fetch : const s.(space_address) -> 
+      forall agg : nat, option (bits (agg * sp.(space_cell_size))).
+
+
 
 Existing Instance space_cell_size_pos.
 
@@ -62,6 +87,9 @@ Definition bind {A B} (x : interpM A) (y : A -> interpM B) : interpM B :=
       | None => (None, s')
       | Some c => y c s'
     end.
+
+Definition seq (x y : interpM ()) :=
+  bind x (Basics.const y).
 
 Notation " ( x &? ) " := (exist _ x _).
 
@@ -181,6 +209,7 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space) (addr 
       apply (mem_cell_fetches m sp' addr' agg).
 Defined.
   
+
 Equations eval_store {n} (l : location n) (c : option (const n)) : interpM () :=
 eval_store n (AGG w endian sp e wgtn wmultn) c := 
   bind (eval_exp e) (fun e' =>
@@ -199,8 +228,10 @@ Definition one_guarded (g : guarded) : interpM () :=
         apply_effect ef
        else ret ()).
 
-Definition seq (x y : interpM ()) :=
-  bind x (Basics.const y).
-
 Definition eval_rtl (r : rtl) : interpM () :=
   fold_left (fun acc g => seq acc (one_guarded g)) r (ret ()).
+
+Definition run_interp (r : rtl) (m : mem) : mem :=
+  snd (eval_rtl r m).
+
+

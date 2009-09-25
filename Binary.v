@@ -4,6 +4,10 @@ Inductive endianness := BigEndian | LittleEndian.
 
 Definition overflow := bool.
 
+Equations(nocomp) pow_of_2 (n : nat) : nat :=
+pow_of_2 O := 1 ;
+pow_of_2 (S n) := 2 * pow_of_2 n.
+
 Class Binary (en : endianness) (T : Type) := {
   bin_size : T -> nat ;
   
@@ -18,8 +22,11 @@ Class Binary (en : endianness) (T : Type) := {
 
   bin_plus : T -> T -> T * overflow;
   bin_plus_correct : forall t t' tt', bin_plus t t' = (tt', false) ->
-    nat_of_bin tt' = nat_of_bin t + nat_of_bin t'
+    nat_of_bin t + nat_of_bin t' = nat_of_bin tt' ;
 
+  bin_minus : T -> T -> T * overflow;
+  bin_minus_correct : forall t t' tt', bin_minus t t' = (tt', false) ->
+    nat_of_bin tt' = nat_of_bin t - nat_of_bin t'
 }.
 
 Definition bit := bool.
@@ -34,10 +41,6 @@ Equations(nocomp) div2 (n : nat) : nat :=
 div2 O := 0 ;
 div2 (S O) := 0 ;
 div2 (S (S n)) := S (div2 n).
-
-Equations(nocomp) pow_of_2 (n : nat) : nat :=
-pow_of_2 O := 1 ;
-pow_of_2 (S n) := 2 * pow_of_2 n.
 
 Equations(nocomp) constant_vector {A} (n : nat) (x : A) : vector A n :=
 constant_vector A O x := Vnil ;
@@ -69,10 +72,7 @@ Hint Extern 4 => progress (unfold hide_pattern in *) : Below.
 
 Fixpoint binary_of_nat_le (t : nat) (c : nat) : option (bits t) :=
   match c with
-    | 0 => match t with
-             | 0 => None
-             | _ => Some (constant_vector t false)
-           end
+    | 0 => Some (constant_vector t false)
     | 1 => match t with 
              | 0 => None
              | S n => Some (Vcons true (constant_vector n false))
@@ -89,10 +89,7 @@ Fixpoint binary_of_nat_le (t : nat) (c : nat) : option (bits t) :=
 
 Fixpoint binary_of_nat_be (t : nat) (c : nat) : option (bits t) :=
   match c with
-    | 0 => match t with
-             | 0 => None
-             | S n => Some (constant_vector (S n) false)
-           end
+    | 0 => Some (constant_vector t false)
     | 1 => match t with 
              | 0 => None
              | S n => Some (vector_append_one (constant_vector n false) true)
@@ -154,17 +151,17 @@ Eval compute in (binary_of_nat_le 8 3).
 Eval compute in (binary_of_nat_be 8 1).
 Eval compute in (binary_of_nat_be 8 255).
 
-Lemma binary_of_nat_le_O n : binary_of_nat_le 0 n = None.
-Proof.
-  induction n ; simpl ; auto. destruct n ; auto.
-  rewrite IHn. reflexivity.
-Qed.
+(* Lemma binary_of_nat_le_O n : binary_of_nat_le 0 n = None. *)
+(* Proof. *)
+(*   induction n ; simpl ; auto. destruct n ; auto. *)
+(*   rewrite IHn. reflexivity. *)
+(* Qed. *)
 
-Lemma binary_of_nat_be_O n : binary_of_nat_be 0 n = None.
-Proof.
-  induction n ; simpl ; auto. destruct n ; auto.
-  rewrite IHn. reflexivity.
-Qed.
+(* Lemma binary_of_nat_be_O n : binary_of_nat_be 0 n = None. *)
+(* Proof. *)
+(*   induction n ; simpl ; auto. destruct n ; auto. *)
+(*   rewrite IHn. reflexivity. *)
+(* Qed. *)
 
 (** The [Representable t c] class allows to check at compile-time that a
    natural number [c] is representable as a binary number on [t] bytes.
@@ -253,16 +250,15 @@ Lemma binary_of_nat_be_n_O n : binary_of_nat_be (S n) 0 = Some (constant_vector 
 Proof with auto with *.
   induction n ; intros...
 Qed.
-
+Transparent binary_of_nat_be. 
 Lemma nat_of_binary_inverse n (t : nat) (b : bits t) : binary_of_nat_be t n = Some b ->
   nat_of_binary_be b = n.
 Proof with auto with *. intros n t b Htb. generalize dependent t. induction n ; intros...
-  Opaque binary_of_nat_be.
 
-  induction t... rewrite binary_of_nat_be_n_O in Htb. simpdep.
-  simpl. clear. induction t...
+  induction t... simpl in Htb. noconf Htb. 
+  noconf Htb.
 
-  simpl in *. Transparent binary_of_nat_be. simpl in *. destruct n.
+  simpl in *. destruct n.
   destruct t... simpdep. clear. induction t...
 
   case_eq (binary_of_nat_be t (S n)); [intros b' Hb'Sn | intros Hb'Sn ].
@@ -282,49 +278,9 @@ Proof with auto with *.
   intros. destruct R. now apply nat_of_binary_inverse.
 Qed.
 
-(** Binary equality *)
+Lemma pow_of_2_pos n : pow_of_2 n > 0.
+Proof. induction n. auto. simpl. omega. Qed.
 
-Equations(nocomp) binary_eq {n} (x y : bits n) : bool :=
-binary_eq ?(0) Vnil Vnil := true ;
-binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
-
-Lemma binary_eq_refl n (b : bits n) : binary_eq b b = true.
-Proof. intros. remember b as b'. rewrite Heqb' at 1. funind (binary_eq b b') foo. 
-  rewrite bool_eq_refl. rewrite IHbinary_eq_ind. reflexivity.
-  simp binary_eq in foo. rewrite bool_eq_refl in foo. assumption.
-Qed.
-
-Instance const_eq : EqDec (bits n) eq.
-Proof. 
-intros n. red. intros. case_eq (binary_eq x y) ; [ left | right ].
-
-  funind (binary_eq x y) foo. reflexivity.
-  red. rewrite andb_true_iff in x. destruct x.
-  specialize (IHbinary_eq_ind H1).
-  apply bool_eq_ok in H. subst.
-  simp binary_eq in foo. rewrite bool_eq_refl in foo. 
-  specialize (IHbinary_eq_ind foo). congruence.
-
-  funind (binary_eq x y) foo. red ; intros.
-  red in H. noconf H. simp binary_eq in foo.
-  rewrite bool_eq_refl, binary_eq_refl in foo.
-  simpl in foo. discriminate.
-Qed.
-  
-Definition coerce_bits {n m} (c : bits n) (H : n = m) : bits m.
-Proof. intros ; subst. exact c. Defined.
-
-Equations(nocomp) vector_firstn {A} {l : nat} (s : nat) (c : vector A l) (Hsl : s < l) : vector A s :=
-vector_firstn A ?(O) s Vnil Hsl :=! Hsl ;
-vector_firstn A ?(S n) O (Vcons a n v) Hsl := Vnil ;
-vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
-
-  Next Obligation. omega. Defined.
-
-  Next Obligation. revert s Hsl ; induction c ; intros ;
-    simp vector_firstn ; auto with * ; destruct s ; simp vector_firstn.
-  Defined.
-  
 Equations(nocomp) vfold_right {A : nat -> Type} {B} (f : Π n, B -> A n -> A (S n)) (e : A 0) {n} (v : vector B n) : A n := 
 vfold_right A B f e ?(O) Vnil := e ;
 vfold_right A B f e ?(S n) (Vcons hdv n tlv) := 
@@ -395,6 +351,381 @@ Proof.
   intros. apply (bits_plus_be_correct_full _ _ _ _ _ H).
 Qed.
 
+Inductive bits_nat_view {n} : bits n -> Prop :=
+| b0 : bits_nat_view (constant_vector n false)
+| bS : forall b, bits_nat_view b -> forall b', bits_succ_be n b = (b', false) -> bits_nat_view b'.
+
+Print vector_ind.
+
+Lemma Vcons_append_one {A n} (a : A) (v : vector A n) : exists a' v', (a |:| v)%bin = vector_append_one v' a'.
+Proof. intros. revert a.
+  induction v.
+  intros. exists a. exists (@Vnil A). reflexivity.
+
+  intros.
+  destruct (IHv a) as [a' [ v' Hv' ] ].
+  exists a'. exists (a0 |:| v')%bin. 
+  simp vector_append_one. congruence.
+Qed.
+
+Lemma vector_rev_ind : Π (A : Type) (P : Π n : nat, vector A n -> Prop),
+       P 0 [[]]%bin ->
+       (Π (a : A) (n : nat) (v : vector A n), P n v -> P (S n) (vector_append_one v a)%bin) ->
+       Π (n : nat) (v : vector A n), P n v.
+Proof.
+  intros.
+  destruct v.
+  assumption.
+  revert a v. induction n. intros.
+  depelim v. apply (H0 a 0 Vnil H).
+
+  intros.
+  depelim v.
+  destruct (Vcons_append_one a0 v) as [a' [ v' Ha'v' ] ].
+  pose (IHn a0 v).
+  rewrite Ha'v' in p.
+  rewrite Ha'v'.
+  replace (a |:| vector_append_one v' a')%bin with (vector_append_one (a |:| v') a')%bin.
+  apply H0. apply IHn.
+  simp vector_append_one.
+Qed.
+
+
+Lemma bits_succ_vector_append_0 : Π (n : nat) (v : vector bit n),
+   bits_succ_be (S n) (vector_append_one v 0%bin) =
+   (vector_append_one v 1%bin, 0%bin).
+Proof. intros.
+  Opaque vector_append_one.
+  funind (vector_append_one v false) appv.
+  destruct a.
+  simp bits_succ_be. rewrite IHvector_append_one_ind. reflexivity.
+  simp bits_succ_be. rewrite IHvector_append_one_ind. reflexivity.
+Qed.
+  
+(* Lemma bits_succ_ind' n : Π (P : bits n -> Prop), *)
+(*        P (constant_vector n false) -> *)
+(*        (Π (v : bits n), P v -> forall v', bits_succ_be n v = (v', false) -> P v') -> *)
+(*        Π (v : bits n), P v. *)
+(* Proof. *)
+(*   intros. induction v using vector_rev_ind. apply H. *)
+(*   cut (P (vector_append_one v false)). intros. *)
+(*   destruct a. apply H0 with (vector_append_one v false). assumption. *)
+(*   apply bits_succ_vector_append_0. assumption. *)
+(*   eapply H0. pose @vector_append. *)
+
+
+(*   intros. *)
+(*   destruct v. *)
+(*   assumption. *)
+(*   revert a v. induction n. intros. *)
+(*   depelim v. apply (H0 a 0 Vnil H). *)
+
+
+(* Lemma bits_nat_view_full n (b : bits n) : bits_nat_view b. *)
+(* Proof. *)
+(*   induction b using vector_rev_ind. *)
+(*   constructor. *)
+
+(*   destruct a.  *)
+(*   eapply bS with (vector_append_one b 0)%bin. *)
+(*   eapply bS. *)
+Open Local Scope bin_scope.
+Definition fourty_five := (representation 32 45).
+Definition ninety := (representation 32 90).
+
+Equations(nocomp) binary_minus_be {n} (x y : bits n) : bits n * overflow :=
+binary_minus_be O Vnil Vnil := (Vnil, false) ;
+binary_minus_be (S n) (Vcons hdx n tlx) (Vcons hdy n tly) := 
+  match hdx, hdy with
+    | 1, 1 | 0, 0 => 
+      let '(min', carry) := binary_minus_be tlx tly in
+        (Vcons 0 min', carry)
+    | 0, 1 =>
+      (* diff (b(n-1) * 2^n-1 + ... + b0) (2^n + b'(n-1) 2^n-1 + ... + b'0) =
+         ((2^n - 1) - (b(n-1) * 2^n-1 + ... + b0)) + 1 + b'(n-1) 2^n-1 + ... + b'0) *)
+      let min' := Bneg _ tlx in
+      let '(plus, overflow) := bits_succ_be _ min' in
+        if overflow then (* tlx must have been 0 *)
+          (1 |:| tly, 1)
+        else
+          let '(plus', overflow') := bits_plus_be plus tly in
+            ((overflow' |:| plus'), 1)
+    | 1, 0 => 
+     (* (2^n + b(n-1) * 2^n-1 + ... + b0) - (b'(n-1) 2^n-1 + ... + b'0) =
+        (2^n - 1) - (b'(n-1) 2^(n-1) + ... + b'0) + 1 + (bn * 2^(n-1) + ... + b0) *)
+      let rest := Bneg _ tly in
+      let '(plus, overflow) := bits_succ_be _ rest in
+        if overflow then (* tly was all zeros *)
+          (1 |:| tlx, 0)
+        else
+          let '(plus', overflow') := bits_plus_be plus tlx in
+            (overflow' |:| plus', 0)
+  end.
+
+Notation " 'convertible' x y " := ((@eq_refl _ x) : x = y) (at level 0, x at next level, y at next level).
+
+Global Transparent binary_minus_be bits_plus_be bits_succ_be constant_vector vfold_right2 vector_append_one.
+
+Check (convertible (fst (binary_minus_be ninety fourty_five)) fourty_five).
+Check (convertible (nat_of_binary_be (fst (binary_minus_be fourty_five ninety))) 45).
+
+Definition zero {n} : bits n := constant_vector n false.
+Definition one {n} : bits (S n) := vector_append_one (constant_vector n false) true.
+Definition full {n} : bits n := constant_vector n true.
+
+Eval compute in (binary_minus_be (one (n:=4)) zero). 
+Eval compute in (nat_of_binary_be (fst (binary_minus_be (one (n:=4)) (representation _ 5)))).
+Eval compute in (nat_of_binary_be (fst (binary_minus_be (representation 5 5) (representation _ 5)))).
+Eval compute in (binary_minus_be (representation 5 5) (representation _ 5)).
+
+Lemma bits_succ_be_ne n y b' : bits_succ_be n (Bneg n y) = (b', 1) -> y = zero.
+Proof.
+  induction n; intros. depelim y. reflexivity.
+  
+  Opaque bits_succ_be.
+  depelim y.
+  case_eq (bits_succ_be n (Bneg n y)). intros. destruct o. specialize (IHn _ _ H).
+  destruct a; simp bits_succ_be in x; rewrite H in x ; noconf x. 
+  subst y. reflexivity.
+  
+  destruct a; simp bits_succ_be in x; rewrite H in x; noconf x. 
+Qed.
+
+Lemma nat_of_binary_zero n : nat_of_binary_be (zero (n:=n)) = 0%nat.
+Proof. induction n ; simpl ; auto. Qed.
+
+Lemma nat_of_binary_one n : nat_of_binary_be (one (n:=n)) = 1%nat.
+Proof. induction n ; simpl ; auto. Qed.
+
+
+Lemma nat_of_binary_bound {n} (x : bits n) : nat_of_binary_be x < pow_of_2 n.
+Proof.
+  induction n ; intros. depelim x. simpl. auto.
+  depelim x. destruct a ; simpl ; auto with arith.
+Qed.
+
+Lemma nat_of_binary_bound_eq {n} (x : bits n) : nat_of_binary_be x - pow_of_2 n = 0%nat.
+Proof. intros. generalize (nat_of_binary_bound x). omega. Qed.
+
+Lemma nat_of_binary_bneg n x : nat_of_binary_be (Bneg n x) = 
+  pow_of_2 n - (S (nat_of_binary_be x)).
+Proof.
+  induction n ; intros.
+  
+    now depelim x. 
+    
+    Opaque pow_of_2.
+    simpl in *.
+    case_eq (pow_of_2 (S n)). 
+    generalize (pow_of_2_pos (S n)). 
+    intros ; elimtype False ; omega.
+    
+    intros.
+    depelim x.
+    simpl. 
+    rewrite IHn. case_eq (pow_of_2 n).
+    generalize (pow_of_2_pos n). 
+    intros ; elimtype False ; omega.
+    intros.
+    Transparent pow_of_2. simpl in H.
+    rewrite H0 in H. simpl in H.
+    rewrite plus_comm in H. noconf H.
+    
+    destruct a ; simpl. 
+    omega.
+    
+    case_eq (nat_of_binary_be x); intros. omega.
+    pose (nat_of_binary_bound x). 
+    rewrite H0 in l. omega.
+Qed.
+
+Lemma minus_plus_lt x y z : x > y -> (x - y + z) = (x + z) - y.
+Proof. intros. omega. Qed.
+  
+Lemma minus_plus_lt2 x y z : x > y -> ((x + z) - y) - x = z - y.
+Proof. intros. omega. Qed.
+
+(* Lemma minus_plus_lt3 x y z : x > y -> x + y - z = x + (y - z). *)
+(* Proof. intros. omega. Qed. *)
+
+    
+Lemma binary_minus_correct {n} (x y t : bits n) : binary_minus_be x y = (t, false) -> 
+  nat_of_binary_be x - nat_of_binary_be y = nat_of_binary_be t.
+Proof.
+  intros.
+  Opaque binary_minus_be.
+  induction n ; depelim x; depelim y. reflexivity.
+  destruct a ; destruct a0; simp binary_minus_be in H.
+  case_eq (binary_minus_be x y). intros. rewrite H0 in *.
+  noconf H. specialize (IHn _ _ _ H0).
+  simpl. rewrite <- IHn. omega.
+  
+  clear IHn.
+  case_eq (bits_succ_be n (Bneg n y)); intros ; rewrite H0 in *.
+  destruct o.
+  noconf H. simpl. apply bits_succ_be_ne in H0. subst y. rewrite nat_of_binary_zero.
+  omega.
+
+  case_eq (bits_plus_be b x); intros ; rewrite H1 in *.
+  noconf H. apply bits_plus_be_correct_full in H1. 
+  apply nat_of_binary_bits_succ_be in H0.
+  simpl. rewrite H0 in H1. rewrite nat_of_binary_bneg in *.
+  pose (nat_of_binary_bound x). 
+  pose (nat_of_binary_bound y).
+  destruct o. simpl. destruct H1. rewrite H1.
+  replace (S (pow_of_2 n - S (nat_of_binary_be y))) with (pow_of_2 n - nat_of_binary_be y) by omega.
+  rewrite minus_plus_lt by omega.
+  rewrite minus_plus_lt2 by omega.
+  omega.
+
+  rewrite H1.
+  replace (S (pow_of_2 n - S (nat_of_binary_be y))) with (pow_of_2 n - nat_of_binary_be y) by omega.
+  omega.
+
+  destruct_call bits_succ_be. destruct o ; simpl in H. discriminate.
+  destruct_call @bits_plus_be. discriminate.
+
+  case_eq (binary_minus_be x y) ; intros. rewrite H0 in *.
+  noconf H.
+  simpl. rewrite (IHn _ _ _ H0). reflexivity.
+Qed.
+
+Lemma binary_minus_be_one_overflow n (t : bits (S n)) b : binary_minus_be t one = (b, 1) -> t = zero.
+Proof.
+  induction n ; simpl ; auto.
+  intros. do 2 depelim t. do 2 depelim b. unfold one in H. simpl in H. simp binary_minus_be in H.
+  destruct a. fold bit in H. rewrite binary_minus_be_equation_1 in H. noconf H.
+  simp bits_succ_be in H.
+  
+  intros.
+  depelim t ; depelim b.
+  fold bit in H. unfold one in H. simp binary_minus_be in H.
+  destruct a. destruct_call @bits_succ_be. destruct o. discriminate.
+  destruct_call @bits_plus_be. discriminate.
+  case_eq (binary_minus_be t (vector_append_one (constant_vector n 0) 1)).
+  intros.
+  rewrite H0 in H.
+  noconf H.
+  apply IHn in H0. subst. reflexivity.
+Qed.
+
+Lemma nat_of_binary_one_is_one n (t : bits (S n)) : nat_of_binary_be t = 1%nat -> t = one.
+Proof. induction n ; simpl ; intros ; auto. do 2 depelim t. destruct a ; simpl in * ; auto with *.
+  depelim t. destruct a.
+  generalize (pow_of_2_pos n) ; intros ; elimtype False ; omega.
+  simpl in x. apply IHn in x. rewrite x. reflexivity.
+Qed.
+
+Lemma nat_of_binary_full n : nat_of_binary_be (full (n:=n)) = pow_of_2 n - 1.
+Proof.  Transparent nat_of_binary_be.
+  induction n ; simpl ; auto with *. unfold full in *. rewrite IHn. omega.
+Qed.
+Ltac absurd_arith := intros ; elimtype False ; omega.
+
+Lemma nat_of_binary_be_inj n (t t' : bits n) : nat_of_binary_be t = nat_of_binary_be t' -> t = t'.
+Proof.
+  induction n. depelim t ; depelim t' ; auto with *.
+
+  intros.
+  revert IHn.
+  depelim t. depelim t' ; intros; auto with *.
+  simpl in x. destruct a; destruct a0 ; auto;
+  try rewrite (IHn t t') by omega ; try reflexivity.
+  generalize (nat_of_binary_bound t'). generalize (pow_of_2_pos n). absurd_arith.
+  generalize (nat_of_binary_bound t). generalize (pow_of_2_pos n). absurd_arith.
+Qed.
+  
+Open Local Scope bin_scope.
+Lemma binary_of_nat_inverse {n} (t : bits n) : binary_of_nat_be n (nat_of_binary_be t) = Some t.
+Proof.
+  intros n t. remember (nat_of_binary_be t) as tmp. revert n t Heqtmp. induction tmp ; intros. simpl.
+  destruct n. now depelim t.
+
+  funind (nat_of_binary_be t) foo. subst rest.
+  destruct a. generalize (pow_of_2_pos n). intros. elimtype False. omega. 
+  depind v. reflexivity. simpl. f_equal. f_equal. 
+  specialize (IHnat_of_binary_be_ind foo). congruence.
+
+  Opaque nat_of_binary_be.
+  depelim t.
+  case_eq (binary_minus_be (a |:| t) one).
+  intros.
+  destruct o.
+  apply binary_minus_be_one_overflow in H. rewrite H. rewrite H in Heqtmp.
+  rewrite nat_of_binary_zero in Heqtmp. discriminate.
+
+  apply binary_minus_correct in H. rewrite nat_of_binary_one in H.
+  rewrite <- Heqtmp in H.
+  simpl in H. rewrite <- minus_n_O in H. subst.
+  simplify_IH_hyps.
+  simpl.
+  case_eq (nat_of_binary_be b) ; intros. rewrite H in *.
+
+  pose (nat_of_binary_one_is_one _ _ (symmetry Heqtmp)). rewrite e. reflexivity.
+
+  rewrite H in IHtmp.
+  rewrite IHtmp.
+  case_eq (bits_succ_be (S n) b).
+  intros.
+  destruct o.
+  destruct (bits_succ_be_overflow _ _ _ H0). 
+  subst.
+  rewrite H2 in Heqtmp.
+  rewrite nat_of_binary_full in Heqtmp.
+  replace (S (pow_of_2 (S n) - 1)) with (pow_of_2 (S n)) in Heqtmp. 
+  pose (nat_of_binary_bound (a |:| t)). rewrite <- Heqtmp in l.
+  elimtype False ; omega.
+  
+  generalize (pow_of_2_pos (S n)) ; intros ; omega.
+
+  apply nat_of_binary_bits_succ_be in H0.
+  rewrite Heqtmp in H0. apply nat_of_binary_be_inj in H0. congruence.
+Qed.
+  
+(** Binary equality *)
+
+Equations(nocomp) binary_eq {n} (x y : bits n) : bool :=
+binary_eq ?(0) Vnil Vnil := true ;
+binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
+
+Lemma binary_eq_refl n (b : bits n) : binary_eq b b = true.
+Proof. intros. remember b as b'. rewrite Heqb' at 1. funind (binary_eq b b') foo. 
+  rewrite bool_eq_refl. rewrite IHbinary_eq_ind. reflexivity.
+  simp binary_eq in foo. rewrite bool_eq_refl in foo. assumption.
+Qed.
+
+Instance const_eq : EqDec (bits n) eq.
+Proof. 
+intros n. red. intros. case_eq (binary_eq x y) ; [ left | right ].
+
+  funind (binary_eq x y) foo. reflexivity.
+  red. rewrite andb_true_iff in x. destruct x.
+  specialize (IHbinary_eq_ind H1).
+  apply bool_eq_ok in H. subst.
+  simp binary_eq in foo. rewrite bool_eq_refl in foo. 
+  specialize (IHbinary_eq_ind foo). congruence.
+
+  funind (binary_eq x y) foo. red ; intros.
+  red in H. noconf H. simp binary_eq in foo.
+  rewrite bool_eq_refl, binary_eq_refl in foo.
+  simpl in foo. discriminate.
+Qed.
+  
+Definition coerce_bits {n m} (c : bits n) (H : n = m) : bits m.
+Proof. intros ; subst. exact c. Defined.
+
+Equations(nocomp) vector_firstn {A} {l : nat} (s : nat) (c : vector A l) (Hsl : s < l) : vector A s :=
+vector_firstn A ?(O) s Vnil Hsl :=! Hsl ;
+vector_firstn A ?(S n) O (Vcons a n v) Hsl := Vnil ;
+vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
+
+  Next Obligation. omega. Defined.
+
+  Next Obligation. revert s Hsl ; induction c ; intros ;
+    simp vector_firstn ; auto with * ; destruct s ; simp vector_firstn.
+  Defined.
+  
+
 Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
   bin_size t := S n ;
   
@@ -403,12 +734,21 @@ Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
 
   bin_succ := bits_succ_be (S n) ;
 
-  bin_plus := bits_plus_be
+  bin_plus := bits_plus_be ;
+  bin_minus := binary_minus_be 
 }.
 
   Next Obligation. now apply nat_of_binary_inverse. Qed.
-
-  Next Obligation. Admitted.
-
+  Next Obligation. apply binary_of_nat_inverse. Qed.
   Next Obligation. now erewrite nat_of_binary_bits_succ_be. Qed.
-  Next Obligation. now apply bits_plus_be_correct. Qed.
+  Next Obligation. symmetry. now apply bits_plus_be_correct. Qed.
+  Next Obligation. symmetry. now apply binary_minus_correct. Qed.
+
+Global Transparent vfold_right2 binary_minus_be bits_succ_be nat_of_binary_be.
+
+Eval compute in (nat_of_bin (fst (bin_plus (representation 32 16) (representation 32 4)))).
+Eval compute in (nat_of_bin (fst (bin_plus (representation 32 90) (representation 32 45)))).
+Eval compute in (nat_of_bin (fst (bin_plus fourty_five ninety))).
+
+Eval compute in (nat_of_bin (fst (bin_minus fourty_five ninety))).
+Eval compute in (nat_of_bin (fst (bin_minus ninety fourty_five))).

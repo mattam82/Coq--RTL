@@ -11,41 +11,40 @@ Fixpoint operator (l : list ty) (t : ty) :=
   end.
   
 Record space := mkSpace {
-  space_n : option nat;
   space_address : ty;
+  loc := const space_address;
+  space_n : option loc; (* Maximal address *)
   space_cell_size : ty;
   space_cell_size_pos : Have (space_cell_size > 0)
 }.
 
+Existing Instance space_cell_size_pos.
+
 Definition space_descr (sp : space) :=
   const sp.(space_address) -> forall agg : nat, option (bits (agg * sp.(space_cell_size))).
 
-Definition loc (sp : space) := const sp.(space_address).
-
 Definition aggregate := nat.
 About binary_of_nat_le.
+
+Open Local Scope nat_scope.
 
 Definition in_space (sp : space) (l : loc sp) (a : aggregate) := 
   match sp.(space_n) with
     | None => true
     | Some n => 
-      match binary_of_nat_le (a * sp.(space_cell_size)) with
+      match binary_of_nat_be _ (a * sp.(space_cell_size)) with
         | Some offset =>
           let '(l', b) := binary_plus_be l offset in
             if b then false
-            else binary_leb_be l' (n * sp.(space_cell_size))
+            else binary_be_le l' n
         | None => false
       end
   end.
-              
+      
+(* Class SpaceImpl (s : space) := *)
+(*   { space_fetch : const s.(space_address) ->  *)
+(*       forall agg : nat, option (bits (agg * sp.(space_cell_size))). *)
 
-Class SpaceImpl (s : space) :=
-  { space_fetch : const s.(space_address) -> 
-      forall agg : nat, option (bits (agg * sp.(space_cell_size))).
-
-
-
-Existing Instance space_cell_size_pos.
 
 Inductive exp : ty -> Set :=
 | CONST {n : ty} (c : const n) : exp n
@@ -69,9 +68,6 @@ Inductive guarded : Set :=
 | GUARD {n} (e : exp n) (ef : effect).
 
 Definition rtl := list guarded.
-
-Definition space_descr (sp : space) :=
-  const sp.(space_address) -> forall agg : nat, option (bits (agg * sp.(space_cell_size))).
 
 Record mem := mkMem {
   mem_cell_fetches: forall (sp : space), space_descr sp
@@ -233,5 +229,7 @@ Definition eval_rtl (r : rtl) : interpM () :=
 
 Definition run_interp (r : rtl) (m : mem) : mem :=
   snd (eval_rtl r m).
+
+
 
 

@@ -1,4 +1,4 @@
-Require Import CSDL.Basics CSDL.Binary String.
+Require Import CSDL.Basics CSDL.Binary CSDL.BinaryBe String.
 Require Import EquivDec Bool SetoidTactics.
 
 Definition ty := nat.
@@ -11,11 +11,13 @@ Fixpoint operator (l : list ty) (t : ty) :=
   end.
   
 Record space := mkSpace {
+  space_name : string;
   space_address : ty;
   loc := const space_address;
-  space_n : option loc; (* Maximal address *)
   space_cell_size : ty;
-  space_cell_size_pos : Have (space_cell_size > 0)
+  space_cell_size_pos : Have (space_cell_size > 0);
+  space_n : option { num : nat & { max_addr : loc | 
+    nat_of_binary_be max_addr = num } }
 }.
 
 Existing Instance space_cell_size_pos.
@@ -31,12 +33,12 @@ Open Local Scope nat_scope.
 Definition in_space (sp : space) (l : loc sp) (a : aggregate) := 
   match sp.(space_n) with
     | None => true
-    | Some n => 
+    | Some (existT n (exist nbin _)) => 
       match binary_of_nat_be _ (a * sp.(space_cell_size)) with
         | Some offset =>
           let '(l', b) := binary_plus_be l offset in
             if b then false
-            else binary_be_le l' n
+            else binary_be_le l' nbin
         | None => false
       end
   end.
@@ -65,7 +67,7 @@ Inductive effect : Set :=
 | KILL {n} (l : location n).
 
 Inductive guarded : Set :=
-| GUARD {n} (e : exp n) (ef : effect).
+| GUARD {n} (e : exp (S n)) (ef : effect).
 
 Definition rtl := list guarded.
 
@@ -220,9 +222,8 @@ Definition one_guarded (g : guarded) : interpM () :=
   let 'GUARD n e ef := g in
     bind (eval_exp e) 
     (fun e' => 
-      if binary_eq e' one_binary_le then
-        apply_effect ef
-       else ret ()).
+      if binary_eq e' one then apply_effect ef
+      else ret ()).
 
 Definition eval_rtl (r : rtl) : interpM () :=
   fold_left (fun acc g => seq acc (one_guarded g)) r (ret ()).

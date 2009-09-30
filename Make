@@ -1,5 +1,9 @@
 -R . CSDL
 Have.v
 Basics.v
+Vector.v
 Binary.v
+BinaryBe.v
+BinaryLe.v
+Representable.v
 csdl.v

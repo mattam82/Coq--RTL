@@ -8,6 +8,9 @@ Notation " x |:| y " := (@Vcons _ x _ y) (at level 20, right associativity) : ve
 Notation " [[ x .. y ]] " := (Vcons x .. (Vcons y Vnil) ..) : vect_scope.
 Notation " [[]] " := Vnil : vect_scope.
 
+Implicit Arguments Vhead [ [A] [n] ].
+Implicit Arguments Vtail [ [A] [n] ].
+
 Open Local Scope vect_scope.
 
 Equations(nocomp) constant_vector {A} (n : nat) (x : A) : vector A n :=
@@ -64,6 +67,25 @@ Proof.
   replace (a |:| vector_append_one v' a') with (vector_append_one (a |:| v') a').
   apply H0. apply IHn.
   simp vector_append_one.
+Qed.
+
+Lemma f_JMequal {A B} (f : Π x : A, B x) (x y : A) : x = y -> f x ~= f y.
+Proof. intros. subst. reflexivity. Qed.
+
+Lemma f_JMequal2 {A B C} (f : Π x : A, B x -> C x) (x : A) (b b' : B x) : b ~= b' -> f x b ~= f x b'.
+Proof. intros. pose JMeq_rect.
+  apply (p (B x) b b' (fun b' => f x b ~= f x b')). reflexivity.
+  assumption.
+Qed.
+
+Lemma f_JMequal3 {A B C} (f : Π x : A, B x -> C x) (x y : A) (b : B x) (b' : B y) : x = y ->
+  b ~= b' -> f x b ~= f y b'.
+Proof. intros. subst. apply f_JMequal2. assumption. Qed.
+
+Lemma vector_append_nil {A n} {v : vector A n} : vector_append v [[]] ~= v.
+Proof. intros. funind (vector_append v [[]]) vvnil.
+  apply (f_JMequal3 (@Vcons A a)). omega.
+  assumption.
 Qed.
 
 Equations(nocomp) vector_firstn {A} {l : nat} (s : nat) (c : vector A l) (Hsl : s < l) : vector A s :=

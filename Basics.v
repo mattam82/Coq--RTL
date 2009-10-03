@@ -245,10 +245,15 @@ Proof. induction n. auto. simpl. omega. Qed.
 
 Hint Immediate pow_of_2_pos.
 
-
 Ltac case_eq_rew :=
-  fun x => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros ; 
-    on_last_hyp ltac:(fun H => rewrite H in *).
+  fun x => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
+    on_last_hyp ltac:(fun H => try rewrite H in *).
+
+Ltac destruct_call_eq f := 
+  match goal with
+    | |- ?T => on_application f ltac:(fun app => case_eq_rew app) T
+    | H : ?T |- _ => on_application f ltac:(fun app => case_eq_rew app) T
+  end.
 
 Tactic Notation "funind" constr(c) ident(Hcall) :=
   match c with

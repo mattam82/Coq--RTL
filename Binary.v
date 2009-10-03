@@ -5,6 +5,7 @@ Open Local Scope vect_scope.
 Inductive endianness := BigEndian | LittleEndian.
 
 Definition overflow := bool.
+Definition borrow := bool.
 
 Class Binary (en : endianness) (T : Type) := {
   bin_size : T -> nat ;
@@ -82,13 +83,23 @@ binary_shiftl (S n) (Vcons a n v) :=
   let '(v', overflow) := binary_shiftl v in
     (Vcons overflow v', a).
 
+Equations(nocomp) binary_shiftl_full {n} (t : bits n) : bits (S n) :=
+binary_shiftl_full O Vnil := zero ;
+binary_shiftl_full (S n) (Vcons a n v) := 
+  let v' := binary_shiftl_full v in (a |:| v').
+
 Equations(nocomp) binary_shiftl_n {n} (t : bits n) (m : nat) : bits n * overflow :=
 binary_shiftl_n n t O := (t, false) ;
 binary_shiftl_n n t (S m) <= binary_shiftl t => {
   binary_shiftl_n n t (S m) (pair t' true) := (t', true) ;
   binary_shiftl_n n t (S m) (pair t' false) := binary_shiftl_n t' m }.
+
+Equations(nocomp) binary_shiftl_n_full {n} (t : bits n) (m : nat) : bits (m + n) :=
+binary_shiftl_n_full n t O := t ;
+binary_shiftl_n_full n t (S m) := binary_shiftl_full (binary_shiftl_n_full t m).
     
 Global Transparent binary_shiftl binary_shiftl_n.
+Global Transparent binary_shiftl_full binary_shiftl_n_full.
 
 Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
 Proof.

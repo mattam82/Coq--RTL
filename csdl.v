@@ -10,27 +10,36 @@ Fixpoint operator (l : list ty) (t : ty) :=
     | t' :: l' => const t' -> operator l' t
   end.
   
-Record space := mkSpace {
+Record space_descr := mkSpaceDescr {
   space_name : string;
   space_address : ty;
   loc := const space_address;
   space_cell_size : ty;
   space_cell_size_pos : Have (space_cell_size > 0);
   space_n : option { num : nat & { max_addr : loc | 
-    nat_of_binary_be max_addr = num } }
+    nat_of_binary_be max_addr = num } } }.
+
+Definition space_eq (x y : space_descr) := 
+  x.(space_name) = y.(space_name).
+
+Parameter space_eq_eq : forall (x y : space_descr), space_eq x y -> x = y.
+
+Inductive space (s : space_descr) := mkSpace {
+  space_fetch : loc s -> forall agg : nat, option (const (agg * space_cell_size s)) ;
+  space_store : loc s -> forall agg : nat, const (agg * space_cell_size s) -> space s
 }.
 
 Existing Instance space_cell_size_pos.
 
-Definition space_descr (sp : space) :=
-  const sp.(space_address) -> forall agg : nat, option (bits (agg * sp.(space_cell_size))).
+(* Definition space_descr (sp : space) := *)
+(*   const sp.(space_address) -> forall agg : nat, option (bits (agg * sp.(space_cell_size))). *)
 
 Definition aggregate := nat.
 About binary_of_nat_le.
 
 Open Local Scope nat_scope.
 
-Definition in_space (sp : space) (l : loc sp) (a : aggregate) := 
+Definition in_space (sp : space_descr) (l : loc sp) (a : aggregate) := 
   match sp.(space_n) with
     | None => true
     | Some (existT n (exist nbin _)) => 
@@ -58,7 +67,7 @@ with args : list ty -> Set :=
 | ARGcons {ty tys} : exp ty -> args tys -> args (ty :: tys)
 
 with location : ty -> Set :=
-| AGG {w} (b : endianness) (s : space) (e : exp s.(space_address))
+| AGG {w} (b : endianness) (s : space_descr) (e : exp s.(space_address))
   `{wgtn : Have (w > s.(space_cell_size))}
   `{wmultn : Have (modulo_nat w s.(space_cell_size) = 0)} : location w.
 
@@ -72,7 +81,7 @@ Inductive guarded : Set :=
 Definition rtl := list guarded.
 
 Record mem := mkMem {
-  mem_cell_fetches: forall (sp : space), space_descr sp
+  mem_cell_fetches: forall (sp : space_descr), space sp
 }.
 
 Definition interpM a := mem -> (option a * mem)%type.
@@ -93,13 +102,12 @@ Notation " ( x &? ) " := (exist _ x _).
 
 Notation " ( x & p ) " := (existT _ x p).
 
-Definition mem_cell_fetches_agg {w} (m : mem) (e : endianness) (sp : space) (e : const sp.(space_address)) 
+Definition mem_cell_fetches_agg {w} (m : mem) (e : endianness) (sp : space_descr) (e : const sp.(space_address)) 
   `(wgtn : Have (w > sp.(space_cell_size))) `(Have (sp.(space_cell_size) > 0)) 
   `(wmultn : Have (modulo_nat w sp.(space_cell_size) = 0)) : 
   option (const w).
   intros.
-  pose (fetch := mem_cell_fetches m sp).
-  unfold space_descr in fetch.
+  pose (fetch := space_fetch _ (mem_cell_fetches m sp)).
   set (q := quotient_nat w (space_cell_size sp)).
   pose (fetch e0 q).
   subst q. 
@@ -142,7 +150,7 @@ Proof. trivial. Qed.
 Lemma eval_exp_fetch n (l : location n) : eval_exp (FETCH l) = eval_fetch l.
 Proof. trivial. Qed.
 
-Lemma eval_fetch_agg {w} (endian : endianness) (sp : space) e wgtn wmultn :
+Lemma eval_fetch_agg {w} (endian : endianness) (sp : space_descr) e wgtn wmultn :
   eval_fetch (@AGG w endian sp e wgtn wmultn) =
   bind (eval_exp e) (fun (c : const sp.(space_address)) mem =>
     (mem_cell_fetches_agg mem endian sp c wgtn _ wmultn, mem)).
@@ -159,21 +167,25 @@ Lemma eval_app_cons {t : ty} {l : list ty} (e : exp t) (es : args l) {n : ty} (o
   eval_app (ARGcons e es) o = bind (eval_exp e) (fun e' => eval_app es (o e')).
 Proof. intros. trivial. Qed.
 
-Instance space_eq : EqDec space eq.
+Instance space_eq_dec : EqDec space_descr eq.
+Proof. red ; intros. unfold Equivalence.equiv. 
+  pose (space_eq_eq x y).
+  unfold space_eq in e.
 Admitted.
 
-Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space) (addr : const sp.(space_address)) 
+Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space_descr) (addr : const sp.(space_address)) 
   (c : option (const w))
   `{wgtn : Have (w > sp.(space_cell_size))} `{Have (sp.(space_cell_size) > 0)}
   `{wmultn : Have (modulo_nat w sp.(space_cell_size) = 0)} : mem.
   intros.
-  pose (fetch := mem_cell_fetches m sp).
-  unfold space_descr in fetch.
+  pose (fetch := space_fetch _ (mem_cell_fetches m sp)).
   set (q := quotient_nat w (space_cell_size sp)).
   constructor.
-  intros sp' addr' agg.
+  intros sp'.
   destruct_equiv sp sp'.
 
+    constructor.
+    intros addr' agg.
     destruct_equiv addr addr'.
     
       destruct (compare_dec agg q).
@@ -202,12 +214,15 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space) (addr 
       intros cst. exact cst.
 
       (** Addresses don't match, but may still be part of the aggregate! *)
+      destruct (compare_dec (binary_plus_be addr (binary_of_nat agg * space_cell_size sp') addr').
+
       apply (fetch addr' agg).
 
-      apply (mem_cell_fetches m sp' addr' agg).
+      apply (mem_cell_fetches m sp').
+
+      apply (mem_cell_fetches m sp').
 Defined.
   
-
 Equations eval_store {n} (l : location n) (c : option (const n)) : interpM () :=
 eval_store n (AGG w endian sp e wgtn wmultn) c := 
   bind (eval_exp e) (fun e' =>

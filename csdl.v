@@ -214,8 +214,8 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space_descr) 
       intros cst. exact cst.
 
       (** Addresses don't match, but may still be part of the aggregate! *)
-      destruct (compare_dec (binary_plus_be addr (binary_of_nat agg * space_cell_size sp') addr').
-
+      (* set (addr_agg := binary_plus_be addr (binary_mult_be (binary_of_nat_be _ agg) (space_cell_size sp'))). *)
+      (* destruct (compare_dec ( addr')). *)
       apply (fetch addr' agg).
 
       apply (mem_cell_fetches m sp').
@@ -245,7 +245,4 @@ Definition eval_rtl (r : rtl) : interpM () :=
 
 Definition run_interp (r : rtl) (m : mem) : mem :=
   snd (eval_rtl r m).
-
-
-
 

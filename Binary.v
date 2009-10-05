@@ -102,6 +102,28 @@ binary_shiftl_n_full n t (S m) := binary_shiftl_full (binary_shiftl_n_full t m).
 Global Transparent binary_shiftl binary_shiftl_n.
 Global Transparent binary_shiftl_full binary_shiftl_n_full.
 
+(** * Routine to add three bits and compute a new bit and a carry. *)
+
+Definition add_bits_spec (x y c : bool) :=
+  (xorb (xorb x y) c, (x && y) || (y && c) || (x && c)).
+
+Definition add_bits (x y c : bool) :=
+  if x then 
+    if y then (c, true)
+    else 
+      if c then (false, c)
+      else (x, c)
+  else
+    if y then 
+      if c then (false, c)
+      else (y, c)
+    else (c, false).
+
+Lemma add_bits_correct x y c : add_bits x y c = add_bits_spec x y c.
+Proof.
+  destruct x ; destruct y ; destruct c ; compute ; try reflexivity.
+Qed.
+
 Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
 Proof.
   intros. funind (binary_eq x y) eqxy. destruct recres.
@@ -230,3 +252,27 @@ Program Definition max_int n : bits n :=
   Qed.
 
 Eval compute in (max_int 32).
+
+
+Definition binary_inverse {n} (b : bits n) := Bneg _ b.
+
+Lemma binary_inverse_involutive {n} (b : bits n) : binary_inverse (binary_inverse b) = b.
+Proof. intros. unfold binary_inverse. unfold Bneg.
+  induction b ; simpl ; auto. rewrite negb_involutive.
+  now rewrite IHb.
+Qed.
+
+Lemma binary_inverse_is_constant {n} (b : bits n) c : binary_inverse b = constant_vector n c -> 
+  b = constant_vector n (negb c).
+Proof. 
+  induction b ; simpl ; intros ; auto.
+  noconf H. rewrite negb_involutive. 
+  rewrite (IHb (negb a)) at 1. 
+  rewrite negb_involutive. reflexivity. assumption.
+Qed.
+
+Lemma binary_inverse_constant {n} c : 
+  binary_inverse (constant_vector n c) = constant_vector n (negb c).
+Proof. 
+  induction n ; simpl ; intros ; auto. rewrite IHn. reflexivity.
+Qed.

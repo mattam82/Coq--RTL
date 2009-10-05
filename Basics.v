@@ -1,9 +1,56 @@
 Require Export Arith Program Equations Have Morphisms EquivDec.
 Require Export Relation_Definitions.
 
+
+Ltac case_eq_rew :=
+  fun x => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
+    on_last_hyp ltac:(fun H => try rewrite H in *).
+
+Ltac destruct_call_eq f := 
+  match goal with
+    | |- ?T => on_application f ltac:(fun app => case_eq_rew app) T
+    | H : ?T |- _ => on_application f ltac:(fun app => case_eq_rew app) T
+  end.
+
+Tactic Notation "funind" constr(c) ident(Hcall) :=
+  match c with
+    appcontext C [ ?f ] => 
+      let x := constr:(fun_ind_prf (f:=f)) in
+        (let prf := eval simpl in x in
+         let p := context C [ prf ] in
+         let prf := fresh in
+         let call := fresh in
+           assert(prf:=p) ;
+           (* Abstract the call *)
+           set(call:=c) in *; generalize (refl_equal : call = c); clearbody call ; intro Hcall ;
+           (* Now do dependent elimination and simplifications *)
+           dependent induction prf ; simplify_IH_hyps ;
+           (* Use the simplifiers for the constant to get a nicer goal. *)
+           try simpc f ; try on_last_hyp ltac:(fun id => simpc f in id ; noconf id))
+        || fail 1 "Internal error in funind"
+  end || fail "Maybe you didn't declare the functional induction principle for" c.
+
+Tactic Notation "funind" constr(c) ident(Hcall) "generalizing" ne_hyp_list(l) := 
+  match c with
+    appcontext C [ ?f ] => 
+      let x := constr:(fun_ind_prf (f:=f)) in
+        (let prf := eval simpl in x in
+         let p := context C [ prf ] in
+         let prf := fresh in
+         let call := fresh in
+           assert(prf:=p) ;
+           (* Abstract the call *)
+             set(call:=c) in *; generalize (refl_equal : call = c); intro Hcall ; revert Hcall ; clearbody call ; (* ; *)
+           (* (* Now do dependent elimination and simplifications *) *)
+           revert l ; do_depelim' ltac:(fun hyp => do_ind hyp) prf ; simplify_dep_elim ; 
+           intros ; simplify_IH_hyps ;
+           (* Use the simplifiers for the constant to get a nicer goal. *)
+           try simpc f ; try simpc f in Hcall)
+  end.
+
 Hint Extern 4 => discriminates : core.
 
-Notation " 'convertible' x y " := ((@eq_refl _ x) : x = y) (at level 0, x at next level, y at next level).
+Notation " 'convertible' x y " := (eq_refl : x = y) (at level 0, x at next level, y at next level).
 
 Ltac absurd_arith := intros ; elimtype False ; omega.
 
@@ -247,48 +294,23 @@ Proof. induction n. auto. simpl. omega. Qed.
 
 Hint Immediate pow_of_2_pos.
 
-Ltac case_eq_rew :=
-  fun x => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
-    on_last_hyp ltac:(fun H => try rewrite H in *).
+Require Import ZArith.
+Open Local Scope Z_scope.
 
-Ltac destruct_call_eq f := 
-  match goal with
-    | |- ?T => on_application f ltac:(fun app => case_eq_rew app) T
-    | H : ?T |- _ => on_application f ltac:(fun app => case_eq_rew app) T
+Fixpoint pow_of_2_Z (n : nat) :=
+  match n with 
+    | O => 1%Z
+    | S n => Zdouble (pow_of_2_Z n)
   end.
 
-Tactic Notation "funind" constr(c) ident(Hcall) :=
-  match c with
-    appcontext C [ ?f ] => 
-      let x := constr:(fun_ind_prf (f:=f)) in
-        (let prf := eval simpl in x in
-         let p := context C [ prf ] in
-         let prf := fresh in
-         let call := fresh in
-           assert(prf:=p) ;
-           (* Abstract the call *)
-           set(call:=c) in *; generalize (refl_equal : call = c); clearbody call ; intro Hcall ;
-           (* Now do dependent elimination and simplifications *)
-           dependent induction prf ; simplify_IH_hyps ;
-           (* Use the simplifiers for the constant to get a nicer goal. *)
-           try simpc f ; try on_last_hyp ltac:(fun id => simpc f in id ; noconf id))
-        || fail 1 "Internal error in funind"
-  end || fail "Maybe you didn't declare the functional induction principle for" c.
+Lemma pow_of_2_nat_Z n : Z_of_nat (pow_of_2 n) = pow_of_2_Z n.
+Proof.
+  induction n ; simpl ; auto.
+  repeat rewrite inj_plus. repeat rewrite IHn. 
+  simpl. rewrite Zplus_0_r. rewrite Zdouble_mult. ring.
+Qed.
 
-Tactic Notation "funind" constr(c) ident(Hcall) "generalizing" ne_hyp_list(l) := 
-  match c with
-    appcontext C [ ?f ] => 
-      let x := constr:(fun_ind_prf (f:=f)) in
-        (let prf := eval simpl in x in
-         let p := context C [ prf ] in
-         let prf := fresh in
-         let call := fresh in
-           assert(prf:=p) ;
-           (* Abstract the call *)
-             set(call:=c) in *; generalize (refl_equal : call = c); intro Hcall ; revert Hcall ; clearbody call ; (* ; *)
-           (* (* Now do dependent elimination and simplifications *) *)
-           revert l ; do_depelim' ltac:(fun hyp => do_ind hyp) prf ; simplify_dep_elim ; 
-           intros ; simplify_IH_hyps ;
-           (* Use the simplifiers for the constant to get a nicer goal. *)
-           try simpc f ; try simpc f in Hcall)
-  end.
+Lemma pow_of_2_Z_pos n : pow_of_2_Z n > 0.
+Proof. induction n ; simpl ; try omega.
+  case_eq_rew (pow_of_2_Z n) ; simpl ; auto.
+Qed.

@@ -5,6 +5,7 @@ Vector.v
 Binary.v
 BinaryBe.v
 BinaryLe.v
+SignedBe.v
 Representable.v
 Show.v
 Hexadecimal.v

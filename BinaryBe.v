@@ -310,8 +310,7 @@ Proof.
     Opaque pow_of_2.
     simpl in *.
     case_eq (pow_of_2 (S n)). 
-    generalize (pow_of_2_pos (S n)). 
-    intros ; elimtype False ; omega.
+    generalize (Basics.pow_of_2_pos (S n)). absurd_arith.
     
     intros.
     depelim x.

@@ -25,6 +25,21 @@ Equations vector_append_one {A} {n : nat} (v : vector A n) (a : A) : vector A (S
 vector_append_one A ?(O) Vnil w := Vcons w Vnil ;
 vector_append_one A ?(S n) (Vcons a n x) w := Vcons a (vector_append_one x w).
 
+Equations(nocomp) vmap {A B n} (f : A -> B) (v : vector A n) : vector B n :=
+vmap A B ?(0) f Vnil := Vnil ;
+vmap A B ?(S n) f (Vcons a n v) := Vcons (f a) (vmap f v).
+
+Equations(nocomp) vector_split {A n m} (v : vector A (n + m)) : vector A n * vector A m :=
+vector_split A O m v := (Vnil, v) ;
+vector_split A (S n) m (Vcons a _ v') := let '(l, r) := vector_split v' in
+  (Vcons a l, r).
+
+Equations vfold_left {A B n} (f : B -> A -> B) (v : vector A n) (b : B) : B :=
+vfold_left A B ?(0) f Vnil b := b ;
+vfold_left A B ?(S n) f (Vcons a n v) b := vfold_left f v (f b a).
+
+Global Transparent vfold_left.
+
 Equations(nocomp) vfold_right {A : nat -> Type} {B} (f : Π n, B -> A n -> A (S n)) (e : A 0) {n} 
   (v : vector B n) : A n := 
 vfold_right A B f e ?(O) Vnil := e ;

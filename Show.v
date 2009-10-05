@@ -37,6 +37,8 @@ Fixpoint string_of_string (s : String.string) : list ascii :=
 
 Definition string := list ascii.
 
+Definition char_of_bool (b : bool) : ascii := (if b then "1" else "0")%char.
+
 Coercion str_of_string := string_of_string.
 
 Fixpoint shows (s : list ascii) : String.string := 
@@ -47,6 +49,8 @@ Fixpoint shows (s : list ascii) : String.string :=
 
 Class Show A :=
   show : A -> string.
+
+Definition print `{Show T} (a : T) : String.string := shows (show a).
 
 Open Local Scope char_scope.
 

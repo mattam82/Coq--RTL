@@ -34,6 +34,7 @@ Class Binary (en : endianness) (T : Type) := {
 
 Definition bit := bool.
 Definition bits (n : nat) := vector bit n.
+Definition byte := bits 8.
 
 Definition zero {n} : bits n := constant_vector n false.
 Definition full {n} : bits n := constant_vector n true.
@@ -132,3 +133,100 @@ Class BoolAntiSymmetric {A} (R : A -> A -> bool) :=
 
 Class BoolTransitive {A} (R : A -> A -> bool) := 
   transitivityb : forall x y z, R x y = true -> R y z = true -> R x z = true.
+
+(** * From and to [positive] *)
+
+Require Import BinPos.
+
+Open Local Scope positive_scope.
+
+Obligation Tactic := idtac.
+
+Program Fixpoint binary_of_pos_le (n : nat) : forall (p : positive) `{Hs : Have (Psize p = n)}, bits n :=
+  match n with
+    | 0%nat => λ p Hp, !
+    | S n => λ p Hp, 
+      match p with
+        | 1 => Vcons true Vnil
+        | p~0 => Vcons false (binary_of_pos_le n p _)
+        | p~1 => Vcons true (binary_of_pos_le n p _)
+      end
+  end.
+
+Lemma le_S_n_trans n m : (S n <= S m -> n <= m)%nat.
+Proof. intros. depind H. apply le_n.
+  destruct m. inversion H. apply le_S. apply IHle ; auto.
+Defined.
+Hint Resolve le_S_n_trans.
+
+Lemma eq_add_S_trans n m : S n = S m -> n = m.
+Proof. intros. congruence. Defined.
+Hint Resolve eq_add_S_trans.
+
+Obligation Tactic := program_simplify.
+
+  Next Obligation. unfold Have in *. intros. revert Hp. destruct p; simpl; absurd_arith. Qed.
+
+  Next Obligation. unfold Have in *. simpl in Hp. apply eq_add_S_trans in Hp. assumption. Defined.
+
+  Next Obligation. 
+    unfold Have in *. 
+    simpl in Hp. apply eq_add_S_trans in Hp. assumption.
+  Defined.
+
+  Next Obligation. 
+    unfold Have in *. 
+    simpl in Hp. apply eq_add_S_trans in Hp. assumption.
+  Defined.
+
+Implicit Arguments binary_of_pos_le [ [ Hs ] ].
+
+Program Fixpoint binary_of_pos_be (n : nat) : forall (p : positive) `{Hs : Have (Psize p <= n)%nat}, 
+  bits n :=
+  match n with
+    | 0%nat => λ p Hp, !
+    | S n => λ p Hp, 
+      match p with
+        | 1 => vector_append_one zero true
+        | p~0 => vector_append_one (binary_of_pos_be n p _) false
+        | p~1 => vector_append_one (binary_of_pos_be n p _) true
+      end
+  end.
+
+  Next Obligation. unfold Have in *. intros. revert Hp. destruct p; simpl; absurd_arith. Qed.
+
+  Next Obligation. unfold Have in *. simpl in Hp. apply le_S_n_trans. assumption. Defined.
+
+  Next Obligation. 
+    unfold Have in *. 
+    simpl in Hp. apply le_S_n_trans in Hp. assumption.
+  Defined.
+
+Implicit Arguments binary_of_pos_be [ [ Hs ] ].
+
+(** For [binary_of_pos] preconditions. *)
+
+Hint Extern 3 (Have (Psize _ = _)) => reflexivity : typeclass_instances.
+Hint Extern 3 (Have (Psize ?x <= ?y)%nat) => apply (@leb_complete (Psize x) y eq_refl) : typeclass_instances.
+
+Eval compute in (binary_of_pos_be 3 (5%positive)).
+Eval compute in (binary_of_pos_be 3 (6%positive)).
+Eval compute in (binary_of_pos_be 32 (6%positive)).
+Eval compute in (binary_of_pos_be 32 (255%positive)).
+
+Fixpoint pow_of_2_positive (n : nat) : positive :=
+  match n with
+    | O => 1
+    | S n => (pow_of_2_positive n)~0
+  end.
+
+Eval compute in (binary_of_pos_be 32 (pow_of_2_positive 32 - 1)).
+
+Program Definition max_int n : bits n := 
+  match n with O => (@zero 0) | S n => (@binary_of_pos_be (S n) (pow_of_2_positive (S n) - 1) _) end.
+
+  Next Obligation. red. induction n0. simpl. auto. 
+    simpl. case_eq_rew (pow_of_2_positive n0); simpl in *; omega.
+  Qed.
+
+Eval compute in (max_int 32).

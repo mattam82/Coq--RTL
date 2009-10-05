@@ -88,14 +88,14 @@ Ltac ind_on f :=
         apply Fix_sub_rect ; fold f ; unfold MR in * ; simpl ; intros
   end.
 
-Lemma euclid_spec n m `{Have (m > 0)} : forall q r, euclid n m = (q, r) -> n = m * q + r.
+Lemma euclid_spec n m `{Have (m > 0)} : forall q r, euclid n m = (q, r) -> n = m * q + r /\ r < m.
 Proof.
   intros n m H. unfold euclid. ind_on euclid_func. 
   admit.
 
   destruct x as [ n' [ m' Hm' ] ]; simpl in *.
   case_eq (ltb n' m') ; intro Hlt ; rewrite Hlt in *. 
-  program_simpl. omega.
+  program_simpl. split ; try omega. apply leb_complete in Hlt. omega.
   match type of H1 with
     context [ euclid_func ?t ] => specialize (H0 t)
   end.
@@ -106,8 +106,9 @@ Proof.
   assert(n' - m' < n') by (unfold Have in * ; omega).
   specialize (H0 H1).
   simplify_IH_hyps. replace (m' * S n0 + r) with (m' + (m' * n0 + r)) by ring.
+  destruct H0.
   rewrite <- H0.
-  rewrite <- le_plus_minus. reflexivity.
+  rewrite <- le_plus_minus. split. reflexivity. auto.
   omega.
 Defined.
 
@@ -128,13 +129,14 @@ Definition modulo_nat n m `{Have (m > 0)} : nat := snd (euclid n m).
 Lemma quotient_cancel : forall x y `{Have (y > 0)}, modulo_nat x y = 0 -> quotient_nat x y * y = x.
 Proof. intros x y H. unfold modulo_nat, quotient_nat in *. 
   generalize (euclid_spec x y). destruct_call euclid ; intros Heucl ; simplify_IH_hyps.
+  destruct Heucl.
   simpl in *. intros. subst. ring.
 Defined.
 
 Lemma euclid_0 y `{Have (y > 0)} : euclid 0 y = (0, 0).
 Proof. intros.
   generalize (euclid_spec 0 y).
-  destruct_call euclid ; intros ; simplify_IH_hyps.
+  destruct_call euclid ; intros ; simplify_IH_hyps. destruct H0.
   induction n. ring_simplify in H0. subst ; reflexivity.
   unfold Have in *.
   destruct y. inversion H.
@@ -191,7 +193,7 @@ Ltac unhave := unfold Have in *.
 
 Lemma quotient_gt_1 x y `{Have (y > 0)} : x > y -> modulo_nat x y = 0 -> quotient_nat x y > 1.
 Proof. intros x y H. unfold modulo_nat, quotient_nat. generalize (euclid_spec x y).
-  destruct_call euclid ; program_simpl. simplify_IH_hyps. subst x. ring_simplify in H1.
+  destruct_call euclid ; program_simpl. simplify_IH_hyps. destruct H0. subst x. ring_simplify in H1.
   unhave. repeat (destruct n; try omega).
 Qed.
 Require Import SetoidTactics.

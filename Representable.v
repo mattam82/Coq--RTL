@@ -16,11 +16,19 @@ Class Representable (e : endianness) (t : nat) (c : nat) := mkRepresentable {
 (** This instance tries to run a conversion function and produces a proof 
    that the natural is representable. *)
 
+Ltac fast_be_representation t c :=
+  let repr := eval vm_compute in (binary_of_nat_be t c) in
+    match repr with
+      | Some ?c' => set (foo:= @mkRepresentable BigEndian t c c' 
+        (@eq_refl _ (Some c') <: binary_of_nat_be t c = Some c'))
+      | None => fail 1
+    end.
+
 Hint Extern 2 (Representable LittleEndian ?t ?c) => 
   exact (mkRepresentable LittleEndian t c _ eq_refl) : typeclass_instances.
-Hint Extern 5 (Representable ?e ?t ?c) => 
-  apply (@mkRepresentable BigEndian t c _ eq_refl) : typeclass_instances.
+Hint Extern 5 (Representable ?e ?t ?c) => fast_be_representation t c : typeclass_instances.
 
+(* apply (@mkRepresentable BigEndian t c _ eq_refl)  *)
 (* let x := eval compute in (binary_of_nat_be t c) in *)
   (* match x with *)
   (*   | Some ?x =>  *) 

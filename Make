@@ -6,4 +6,6 @@ Binary.v
 BinaryBe.v
 BinaryLe.v
 Representable.v
+Show.v
+Hexadecimal.v
 csdl.v

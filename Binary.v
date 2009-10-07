@@ -290,3 +290,7 @@ Proof. intros. Opaque vector_append.
   funind (vector_append v w) vw.
   rewrite IHvector_append_ind. reflexivity.
 Qed.
+
+Hint Rewrite @binary_inverse_constant 
+  @binary_inverse_involutive 
+  @binary_inverse_vector_append : binary.

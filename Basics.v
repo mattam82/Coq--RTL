@@ -1,6 +1,10 @@
 Require Export Arith Program Equations Have Morphisms EquivDec.
 Require Export Relation_Definitions.
 
+Class Injective {A B} (f : A -> B) :=
+  injective : forall x y, f x = f y -> x = y.
+
+Ltac inject H := apply injective in H ; subst.
 
 Ltac case_eq_rew :=
   fun x => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
@@ -353,17 +357,6 @@ Hint Rewrite nat_of_P_minus_morphism using solve [ auto ] : nat_of_P.
 Lemma pow_of_2_plus n m : (pow_of_2 (n + m) = pow_of_2 n * pow_of_2 m)%nat.
 Proof. unfold pow_of_2. intros. autorewrite with nat_of_P pow_of_2. reflexivity. Qed.
 
-Hint Rewrite inj_0 inj_S inj_plus inj_mult inj_min inj_max : Z_of_nat. 
-Hint Rewrite <- inj_eq_iff inj_le_iff inj_lt_iff inj_ge_iff Zpos_eq_Z_of_nat_o_nat_of_P
-  Zpos_P_of_succ_nat : Z_of_nat.
-
-Hint Resolve inj_eq inj_neq inj_le inj_gt inj_ge inj_lt : Z_of_nat.
-
-Lemma pow_of_2_Z_plus n m : pow_of_2_Z (n + m) = pow_of_2_Z n * pow_of_2_Z m.
-Proof. unfold pow_of_2_Z. intros. autorewrite with Z_of_nat nat_of_P_inv pow_of_2.
-  reflexivity. 
-Qed.
-
 Lemma pow_of_2_0 : (pow_of_2 0 = 1)%nat.
 Proof. 
   intros. simp pow_of_2 nat_of_P. 
@@ -372,9 +365,85 @@ Qed.
 Lemma pow_of_2_Sn n : (pow_of_2 (S n) = pow_of_2 n + pow_of_2 n)%nat.
 Proof. intros. simp pow_of_2 nat_of_P. ring. Qed.
 
-Hint Rewrite pow_of_2_plus pow_of_2_0 pow_of_2_Sn : pow_of_2.
+Hint Rewrite pow_of_2_plus pow_of_2_0 pow_of_2_Sn  minus_plus_simpl_l_reverse pow_of_2_nat_Z : pow_of_2.
 
 Lemma pow_of_2_pos n : (pow_of_2 n > 0)%nat.
 Proof. intros. simp pow_of_2 nat_of_P. auto with nat_of_P. Qed.
 
 Hint Resolve pow_of_2_pos : pow_of_2.
+
+(** Z arith hints. *)
+
+Theorem Zpos_neg : forall p:positive, - Zpos p = Zneg p.
+Proof. intros. simpl. reflexivity. Qed.
+
+Hint Rewrite Zopp_neg Zpos_neg Zopp_involutive
+  Zplus_0_l Zplus_0_r Zplus_opp_l Zplus_opp_r
+  Zmult_1_l Zmult_1_r Zmult_0_r Zmult_0_l
+  Zpos_xI Zneg_xI
+  Zpos_plus_distr Zneg_plus_distr
+  Zpos_mult_morphism Zminus_succ_l
+  Zminus_0_r Zminus_diag
+  Zopp_neg Zopp_involutive
+  : zarith.
+(* Zpos_xO Zneg_xO  *)
+Hint Rewrite <- Zsucc_pred Zpred_succ : zarith.
+
+Lemma Z_of_nat_1 : Z_of_nat 1 = 1.
+Proof. reflexivity. Qed.
+
+Lemma Z_of_nat_0 : Z_of_nat 0 = 0.
+Proof. reflexivity. Qed.
+
+Lemma Z_of_nat_pos n : Z_of_nat n >= 0.
+Proof. auto with zarith. Qed.
+
+Hint Rewrite Z_of_nat_1 Z_of_nat_0 inj_0 inj_S inj_plus inj_mult inj_min inj_max : Z_of_nat. 
+Hint Rewrite <- inj_eq_iff inj_le_iff inj_lt_iff inj_ge_iff Zpos_eq_Z_of_nat_o_nat_of_P : Z_of_nat.
+
+Hint Resolve Z_of_nat_pos inj_eq inj_neq inj_le inj_gt inj_ge inj_lt : Z_of_nat.
+
+Hint Rewrite <- Z_of_nat_1 Z_of_nat_0 inj_0 inj_S inj_plus inj_mult inj_min inj_max pow_of_2_nat_Z : Z_of_nat_inv. 
+Hint Rewrite inj_eq_iff inj_le_iff inj_lt_iff inj_ge_iff Zpos_eq_Z_of_nat_o_nat_of_P : Z_of_nat_inv.
+Hint Rewrite <- inj_minus1 using solve [ auto with zarith ] : Z_of_nat_inv.
+
+Lemma Zge_opp_Zle x y : x <= y -> - x >= - y. 
+Proof. intros. omega. Qed.
+Hint Resolve Zge_opp_Zle : zarith.
+
+Lemma pow_of_2_Z_plus n m : pow_of_2_Z (n + m) = pow_of_2_Z n * pow_of_2_Z m.
+Proof. unfold pow_of_2_Z. intros. autorewrite with Z_of_nat nat_of_P_inv pow_of_2.
+  reflexivity. 
+Qed.
+
+Ltac add_pow_bounds := repeat
+  match goal with
+    | |- context [ pow_of_2_Z ?n ] => let H := fresh "pow_of_2_pos_" n in
+      add_hypothesis H (pow_of_2_Z_pos n)
+    | |- context [ pow_of_2 ?n ] => let H := fresh "pow_of_2_pos_" n in
+      add_hypothesis H (pow_of_2_pos n)
+  end.
+
+Lemma Z_of_nat_pow_of_2_minus_1 n : Z_of_nat (pow_of_2 n - 1) = 
+  pow_of_2_Z n - 1.
+Proof. intros. add_pow_bounds. rewrite inj_minus. 
+  autorewrite with zarith pow_of_2 Z_of_nat. rewrite Zmax_right; omega.
+Qed.
+
+Lemma pow_of_2_Z_O : pow_of_2_Z 0 = 1.
+Proof. intros. autorewrite with zarith pow_of_2 Z_of_nat_inv. simp pow_of_2. Qed.
+
+Lemma pow_of_2_Z_Sn n : pow_of_2_Z (S n) = 2 * pow_of_2_Z n.
+Proof. intros. autorewrite with zarith pow_of_2 Z_of_nat_inv. 
+  f_equal. simpl. simp pow_of_2. omega.
+Qed.
+
+Hint Rewrite pow_of_2_Z_O pow_of_2_Z_Sn pow_of_2_Z_plus : pow_of_2.
+Hint Rewrite Z_of_nat_pow_of_2_minus_1 : Z_of_nat.
+
+Hint Rewrite plus_0_r plus_0_l plus_n_Sm minus_diag
+  : arith.
+
+Hint Rewrite <- pred_Sn mult_n_O mult_n_Sm minus_n_O
+  minus_plus_simpl_l_reverse
+  : arith.

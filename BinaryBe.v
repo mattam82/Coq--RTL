@@ -33,6 +33,8 @@ Proof.
   depelim x. destruct a ; simpl ; autorewrite with pow_of_2; auto with arith. 
 Qed.
 
+Hint Rewrite nat_of_binary_zero nat_of_binary_one nat_of_binary_full : binary.
+
 Lemma nat_of_binary_be_inj n (t t' : bits n) : [: t ] = [: t' ] -> t = t'.
 Proof.
   induction n. depelim t ; depelim t' ; auto with *.
@@ -45,6 +47,8 @@ Proof.
   generalize (nat_of_binary_bound t'). generalize (pow_of_2_pos n). absurd_arith.
   generalize (nat_of_binary_bound t). generalize (pow_of_2_pos n). absurd_arith.
 Qed.
+
+Instance: Injective (@nat_of_binary_be n) := nat_of_binary_be_inj n.
 
 Lemma nat_of_binary_be_eq_rect m n v (H : m = n) : [: eq_rect m (λ h, bits h) v n H ] = [: v ].
 Proof. simplify_dep_elim. simpl. reflexivity. Qed.
@@ -61,6 +65,8 @@ Proof.
 
   rewrite IHvector_append_ind. reflexivity.
 Qed.
+
+Hint Rewrite @nat_of_binary_be_vector_append nat_of_binary_be_eq_rect : binary.
 
 (** * Inverse *)
 
@@ -92,6 +98,8 @@ Proof.
     pose (nat_of_binary_bound x). 
     rewrite H0 in l. omega.
 Qed.
+
+Hint Rewrite @nat_of_binary_inverse : binary.
 
 (** * Successor: adding 1. *)
 
@@ -177,6 +185,8 @@ Proof with auto with *.
   induction n ; intros...
 Qed.
 
+Hint Rewrite binary_of_nat_be_n_O : binary.
+
 Transparent binary_of_nat_be. 
 
 Lemma nat_of_binary_binary_of_nat_inverse n (t : nat) (b : bits t) : binary_of_nat_be t n = Some b ->
@@ -200,6 +210,7 @@ Proof with auto with *. intros n t b Htb. generalize dependent t. induction n ; 
   now rewrite Hb'Sn in *.
 Qed.
 
+Hint Rewrite nat_of_binary_binary_of_nat_inverse using solve [ auto ] : binary.
 
 (** * Zero extension *)
 
@@ -215,6 +226,8 @@ Proof. intros. unfold zero. induction n; simp vector_append. Qed.
 
 Lemma zx_be_correct {t t'} `{Have (t' >= t)} (c : bits t) : [: zx_be c ] = [:c].
 Proof. intros. unfold zx_be. rewrite nat_of_binary_be_eq_rect. rewrite nat_of_zx_zero. reflexivity. Qed.
+
+Hint Rewrite @nat_of_zx_zero @zx_be_correct : binary.
 
 (** * Addition *)
 
@@ -281,7 +294,6 @@ Proof.
   intros. apply (binary_plus_be_correct_full _ _ _ _ _ H).
 Qed.
 
-
 Lemma bits_succ_vector_append_0 : Π (n : nat) (v : vector bit n),
   bits_succ_be (vector_append_one v 0%bin) =
   (vector_append_one v 1%bin, 0%bin).
@@ -292,6 +304,8 @@ Proof. intros.
   simp bits_succ_be. rewrite IHvector_append_one_ind. reflexivity.
   simp bits_succ_be. rewrite IHvector_append_one_ind. reflexivity.
 Qed.
+
+Hint Rewrite bits_succ_vector_append_0 : binary.
 
 Open Local Scope vect_scope.  
 Open Local Scope bin_scope.  
@@ -340,6 +354,8 @@ Definition binary_minus_be {n} (x y : bits n) : bits n * borrow :=
 
 Lemma nat_of_binary_bound_eq {n} (x : bits n) : nat_of_binary_be x - pow_of_2 n = 0%nat.
 Proof. intros. generalize (nat_of_binary_bound x). omega. Qed.
+
+Hint Rewrite @nat_of_binary_bound_eq : binary.
 
 Lemma minus_plus_lt x y z : x > y -> (x - y + z) = (x + z) - y.
 Proof. intros. omega. Qed.
@@ -492,6 +508,8 @@ Proof.
   rewrite Heqtmp in H0. apply nat_of_binary_be_inj in H0. congruence.
 Qed.
 
+Hint Rewrite @binary_of_nat_inverse : binary.
+
 Equations(nocomp) binary_mult_be {n m} (x : bits m) (y : bits n) : bits n * overflow :=
 binary_mult_be n O Vnil y := (zero, false) ;
 binary_mult_be n (S m) (Vcons hdx m tlx) y :=
@@ -621,6 +639,8 @@ Proof.
   rewrite zx_be_correct.
   apply IHx.
 Qed.
+
+Hint Rewrite @binary_mult_full_be_correct : binary.
 
 Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
   bin_size t := S n ;

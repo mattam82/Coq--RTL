@@ -54,6 +54,12 @@ Proof. intros. simpl. rewrite <- pow_of_2_nat_Z.
   generalize (Z_of_signed_be_bound_pos t). omega.
 Qed.
 
+
+Lemma Z_of_nat_of_binary_full n : Z_of_nat [: (@full n) ] = pow_of_2_Z n - 1.
+Proof. intros. rewrite nat_of_binary_full. rewrite inj_minus, pow_of_2_nat_Z. 
+  rewrite Zmax_right. simpl ; ring. generalize (pow_of_2_Z_pos n). intros ; simpl ; omega. 
+Qed.
+
 Lemma Z_of_nat_pos n : Z_of_nat n >= 0.
 Proof. auto with zarith. Qed.
 
@@ -297,40 +303,6 @@ Proof.
 Qed.
 
 
-(** Representing integers by signed binary numbers. *)
-
-Definition signed_of_Z_be {n} (z : Z) : option (bits (S n)) :=
-  match z with
-    | Z0 => Some zero
-    | Zpos p => 
-      match dec (leb (Psize p) n) with
-        | left H => Some (Vcons false (binary_of_pos_be n p (Hs:=leb_complete _ _ H)))
-        | right _ => None
-      end
-        (* (binary_of_nat_be n (nat_of_P p)) *)
-    | Zneg 1 => Some full
-    | Zneg p => let p' := Ppred p in
-      match leb (Psize p') n as lepn return leb (Psize p') n = lepn -> option (bits (S n)) with
-        | true => λ le, Some (Vcons true (binary_inverse (binary_of_pos_be n p' (Hs:=leb_complete _ _ le))))
-        | false => λ le, None
-      end eq_refl
-  end.
-
-Eval compute in (@signed_of_Z_be 7 (-5)).
-Eval compute in (@signed_of_Z_be 7 5).
-Eval compute in (@signed_of_Z_be 7 (-1)).
-Eval compute in (@signed_of_Z_be 7 (- Z_of_nat (pow_of_2 7))).
-Eval compute in (@signed_of_Z_be 7 (- Z_of_nat (pow_of_2 7 + 1))).
-Eval compute in (@signed_of_Z_be 7 (pow_of_2_Z 7)).
-Eval compute in (@signed_of_Z_be 7 (pow_of_2_Z 7 - 1)).
-Eval compute in (@signed_of_Z_be 7 0).
-Eval compute in (@signed_of_Z_be 7 1).
-
-Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 (-5))).
-Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 (-128))).
-Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 0)).
-Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 127)).
-
 Lemma nat_of_binary_be_vector_append_one {n} (b : bits n) c :
   [: vector_append_one b c ] = (2 * [: b ] + nat_of_bool c)%nat.
 Proof.
@@ -357,25 +329,330 @@ Proof. intros n p. revert n.
   rewrite nat_of_binary_zero. simpl. unfold nat_of_P. simpl. reflexivity.
 Qed.
 
-Lemma signed_of_Z_be_Z_of_signed_inverse n z b :
+Tactic Notation "apply" "*" constr(c) := apply c || symmetry ; apply c.
+
+
+(** Representing integers by signed binary numbers. *)
+
+Definition signed_of_Z_be {n} (z : Z) : option (bits (S n)) :=
+  match z with
+    | Z0 => Some zero
+    | Zpos p => 
+      match dec (leb (Psize p) n) with
+        | left H => Some (Vcons false (binary_of_pos_be n p (Hs:=leb_complete _ _ H)))
+        | right _ => None
+      end
+        (* (binary_of_nat_be n (nat_of_P p)) *)
+    | Zneg 1 => Some full
+    | Zneg p => let p' := Ppred p in
+      match dec (leb (Psize p') n) with
+        | left H => Some (Vcons true (binary_inverse (binary_of_pos_be n p' (Hs:=leb_complete _ _ H))))
+        | _ => None
+      end
+  end.
+
+Eval compute in (@signed_of_Z_be 7 (-5)).
+Eval compute in (@signed_of_Z_be 7 5).
+Eval compute in (@signed_of_Z_be 7 (-1)).
+Eval compute in (@signed_of_Z_be 7 (- Z_of_nat (pow_of_2 7))).
+Eval compute in (@signed_of_Z_be 7 (- Z_of_nat (pow_of_2 7 + 1))).
+Eval compute in (@signed_of_Z_be 7 (pow_of_2_Z 7)).
+Eval compute in (@signed_of_Z_be 7 (pow_of_2_Z 7 - 1)).
+Eval compute in (@signed_of_Z_be 7 0).
+Eval compute in (@signed_of_Z_be 7 1).
+
+Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 (-5))).
+Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 (-128))).
+Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 0)).
+Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 127)).
+
+Lemma Z_of_signed_of_Z_inverse n z b :
   @signed_of_Z_be n z = Some b -> [Z: b] = z.
 Proof.
   intros. induction z; try noconf H. apply Z_of_signed_be_zero.
   simpl in H.
   case_eq_rew (dec (leb (Psize p) n)). noconf H.
   simpl. rewrite nat_of_binary_of_pos_be. 
-Admitted.
-(*   revert H. *)
-(*   set(foo:=leb_complete (Psize p) n). *)
-(*   Set Printing All. intros. *)
-(*   reverse. intros n p b. destruct (Psize p). *)
+  apply* Zpos_eq_Z_of_nat_o_nat_of_P.
+  discriminate.
 
-  
-  
+  simpl in H.
+  case_eq_rew (dec (leb (Psize (Ppred p)) n)). 
+  destruct p; noconf H.
+  simpl. rewrite binary_inverse_involutive.
+  unfold Zsucc. rewrite nat_of_binary_of_pos_be.
+  rewrite <- Zpos_eq_Z_of_nat_o_nat_of_P. simpl. reflexivity.
 
-(* case_eq_rew (Psize p). *)
-(*   destruct (leb (Psize p) n). *)
+  simpl.
+  rewrite binary_inverse_involutive.
+  unfold Zsucc. rewrite nat_of_binary_of_pos_be.
+  rewrite <- Zpos_eq_Z_of_nat_o_nat_of_P. simpl.
+  rewrite <- Pplus_one_succ_r.
+  rewrite Psucc_o_double_minus_one_eq_xO. reflexivity.
 
-(*   [apply leb_complete in H0 | apply leb_complete_conv in H0]. *)
+  rewrite Z_of_signed_be_full. reflexivity.
+
+  destruct p ; noconf H.
+  rewrite Z_of_signed_be_full. reflexivity.
+Qed.
+
+Lemma signed_of_Z_be_neg {n} (b : bits n) : [Z: true |:| b] = Zneg (P_of_succ_nat [: binary_inverse b]).
+Proof.
+  intros. simpl.
+  case_eq_rew ([: binary_inverse b]).
+  simpl. reflexivity.
+
+  simpl.
+  rewrite <- Pplus_one_succ_r. reflexivity.
+Qed.
+
+Derive NoConfusion for positive.
+
+(** * Sign extension *)
+
+Equations(nocomp) sx_be {n} (b : bits (S n)) (m : nat) : bits (S m + n) :=
+sx_be n (Vcons x n b) m := if x then vector_append full b 
+  else Vcons false (vector_append zero b).
+
+Lemma sx_correct {n} (b : bits (S n)) m : [Z: sx_be b m] = [Z: b].
+Proof.
+  intros. Opaque Z_of_signed_be. funind (sx_be b m) bm. 
+  destruct a.
+  unfold full. simpl. simp vector_append.
+  Transparent Z_of_signed_be. simpl. 
+  rewrite binary_inverse_vector_append.
+  rewrite binary_inverse_constant.
+  rewrite nat_of_binary_be_vector_append.
+  rewrite nat_of_binary_zero. rewrite mult_comm ; reflexivity.
+
+  simpl.
+  rewrite nat_of_binary_be_vector_append.
+  rewrite nat_of_binary_zero. rewrite mult_comm ; reflexivity.
+Qed.
+
+Instance psize_psucc `(Have (Psize (Psucc p) <= n)%nat) : Have (Psize p <= n)%nat. 
+Proof. unfold Have ; induction p ; simpl ; intros. destruct n ; [inversion H|].
+  apply le_S_n in H. pose (IHp _ H). omega. auto. omega.
+Qed.
+
+Instance psize_S `(Have (Psize p <= n)%nat) : Have (Psize (p~0) <= S n)%nat. 
+Proof. unfold Have. intros. simpl. omega. Qed.
+
+
+Lemma binary_of_pos_be_Psucc (p : positive) n (Hs : Have (Psize (Psucc p) <= n)%nat) :
+  [: binary_of_pos_be n (Psucc p) ] = S [: binary_of_pos_be n p ].
+Proof.
+  induction p; intros. simpl. destruct n ; simpl. bang.
+  rewrite ! nat_of_binary_be_vector_append_one. simpl. ring_simplify.
+  rewrite IHp. ring_simplify. pi.
+
+  simpl. destruct n ; [inversion Hs|]. simpl.
+  rewrite ! nat_of_binary_be_vector_append_one. simpl. ring_simplify. pi.
+
+  simpl. unfold Have in Hs. depelim Hs. simpl. 
+  rewrite ! nat_of_binary_be_vector_append_one. simpl. ring_simplify. 
+  rewrite ! nat_of_binary_be_vector_append_one. simpl. reflexivity.
+
+  simpl.
+  destruct m. inversion Hs. simpl.
+  rewrite ! nat_of_binary_be_vector_append_one. simpl. 
+  rewrite ! nat_of_binary_be_vector_append_one. simpl. 
+  rewrite ! nat_of_binary_zero. simpl. reflexivity.
+Qed.
+
+Lemma binary_of_pos_be_binary_of_nat n (p : positive) (Hs : Have (Psize p <= n)%nat) : exists b,
+  binary_of_nat_be n (nat_of_P p) = Some b /\ binary_of_pos_be n p = b.
+Proof.
+  intros n p. pattern p. apply Prect ; intros.
+  simpl. destruct n. inversion Hs. simpl. exists (vector_append_one (@zero n) 1%bin). split ; reflexivity.
   
-(*   try noconf H.  *)
+  rewrite nat_of_P_succ_morphism.
+  simpl. destruct_call_eq nat_of_P. 
+  generalize (lt_O_nat_of_P p0). absurd_arith.
+  destruct (H (psize_psucc Hs)). 
+  destruct H1. subst. exists (binary_of_pos_be n (Psucc p0)). rewrite H1. 
+  destruct_call_eq @bits_succ_be.
+  
+  destruct o. 
+  apply bits_succ_be_overflow in H2.
+  destruct H2. subst. 
+  remember (binary_of_pos_be n (Psucc p0)).
+  apply (f_equal nat_of_binary_be) in Heqb. rewrite binary_of_pos_be_Psucc in Heqb.
+  rewrite H3 in Heqb. rewrite nat_of_binary_full in Heqb. generalize (nat_of_binary_bound b).
+  absurd_arith.
+
+  apply bits_succ_be_correct in H2.
+  split. f_equal. 
+  apply nat_of_binary_be_inj. rewrite H2. 
+  rewrite binary_of_pos_be_Psucc. reflexivity.
+  reflexivity.
+Qed.
+
+Lemma pow_of_2_Z_positive n : pow_of_2_Z n = Zpos (pow_of_2_positive n).
+Proof. induction n ; simpl ; auto. rewrite IHn. 
+  rewrite Zdouble_mult ; reflexivity.
+Qed.
+
+Lemma pow_of_2_Z_S n : pow_of_2_Z (S n) = Zpos (pow_of_2_positive n)~0.
+Proof. intros. rewrite pow_of_2_Z_positive. simpl. reflexivity. Qed.
+  
+Lemma pow_of_2_positive_Psize n : Psize (pow_of_2_positive n) = S n.
+Proof. intros. induction n ; simpl ; auto. Qed.
+  
+Lemma Psize_Ppred_pow_of_2_positive n : Psize (Ppred (pow_of_2_positive (S n))) = S n.
+Proof. intros. induction n ; simpl ; auto. Qed.
+  
+Derive NoConfusion for Datatypes.comparison Z.
+
+Lemma pow_of_2_size n p : pow_of_2_Z n > Zpos p -> (n >= Psize p)%nat.
+Proof. induction n ; intros. simpl in H. 
+  revert H. pattern p ; apply Prect. intros. inversion H.
+  intros.
+  inversion H0. destruct p0 ; compute in H2; discriminate.
+  
+  destruct p.
+  
+  simpl.
+  simpl in H. rewrite Zdouble_mult in H. Transparent Zmult. rewrite pow_of_2_Z_positive in H.
+  simpl in H. 
+  exploit (IHn p). rewrite Zpos_xI, Zpos_xO in H.
+  rewrite pow_of_2_Z_positive. omega. intros.
+  omega.
+  
+  simpl.
+  simpl in H. rewrite Zdouble_mult in H. Transparent Zmult. rewrite pow_of_2_Z_positive in H.
+  simpl in H. 
+  exploit (IHn p). rewrite Zpos_xO in H. rewrite (Zpos_xO p) in H. 
+  rewrite pow_of_2_Z_positive. omega. intros. omega.
+  
+  simpl. omega.
+Qed.
+
+Lemma Zpos_p_nat_of_P p : Zpos p = Z_of_nat (nat_of_P p).
+Proof. intro p ; pattern p ; apply Prect. 
+  simpl. reflexivity.
+  intros.
+  rewrite nat_of_P_succ_morphism, inj_S. rewrite <- H. 
+  destruct p0; simpl ; reflexivity.
+Qed.
+
+Lemma Psize_succ p : (Psize p <= Psize (Psucc p))%nat.
+Proof. induction p ; simpl ; auto with arith. Qed.
+  
+Lemma Psize_pred p : (Psize (Ppred p) <= Psize p)%nat.
+Proof. apply Prect. simpl. reflexivity.
+  intros. rewrite Ppred_succ. apply Psize_succ. Qed.
+  
+Lemma signed_of_Z_be_Z_of_signed_inverse n (b : bits (S n)) :
+  signed_of_Z_be [Z: b ] = Some b.
+Proof. intros. depelim b.
+  destruct a.
+
+  simpl. rewrite Z_of_nat_binary_be_inverse.
+  unfold Zopp, Zsucc. 
+  replace (pow_of_2_Z n - (Z_of_nat [: b] + 1) + 1) with (pow_of_2_Z n - Z_of_nat [:b]) by omega.
+  generalize (Z_of_nat_of_binary_be_bound b) ; intros.
+  case_eq_rew (pow_of_2_Z n - Z_of_nat [: b]). 
+  absurd_arith.
+
+  simpl. destruct p. destruct_call dec. simpl. repeat f_equal.
+  apply nat_of_binary_be_inj.
+  rewrite nat_of_binary_inverse.
+  simpl in e. destruct n. discriminate.
+  pose (leb_complete _ _ e).
+  pose (binary_of_pos_be_binary_of_nat (S n) (p~0) (psize_S l)).
+  destruct e0. destruct H1. case_eq_rew (binary_of_nat_be (S n) (nat_of_P p~0)).
+  rewrite H1 in H3. 
+  replace ((@binary_of_pos_be (S n) (xO p) (leb_complete (S (Psize p)) (S n) e))) with
+    (@binary_of_pos_be (S n) (xO p) (@psize_S p n l)) by pi.
+  rewrite H2. clear H2. noconf H1.
+  apply inj_eq_rev. assert(Z_of_nat [:b] = - Zpos p~1 + pow_of_2_Z (S n)). rewrite <- H0. ring. 
+  rewrite H1. rewrite inj_minus, pow_of_2_nat_Z. 
+  rewrite Zmax_right. ring_simplify. 
+  f_equal. simpl. 
+  rewrite (nat_of_binary_binary_of_nat_inverse _ _ _ H3).
+  rewrite P_of_succ_nat_o_nat_of_P_eq_succ. simpl. reflexivity.
+
+  generalize (Z_of_nat_of_binary_be_bound x).
+  rewrite inj_S. intros. omega.
+  discriminate.
+
+  apply leb_complete_conv in e. simpl in e.
+  assert (pow_of_2_Z n >= Zpos p~1) by omega.
+  assert (pow_of_2_Z n > Zpos p~0). apply Zlt_succ_gt.
+  simpl. omega.
+  pose (pow_of_2_size _ _ H2). simpl in g. absurd_arith.
+
+  destruct_call dec. repeat f_equal.
+  rewrite Zpos_xO in H0. 
+  destruct n. simpl pow_of_2_Z in H0.
+  assert(1 - Z_of_nat [:b] <= 0) by omega. 
+  rewrite H0 in H1. simpl in H1. generalize (Zgt_pos_0 (p~0)). absurd_arith.
+
+  apply nat_of_binary_be_inj. rewrite nat_of_binary_inverse.
+  rewrite nat_of_binary_of_pos_be.
+  rewrite <- nat_of_P_succ_morphism.
+  destruct (Psucc_pred (p~0)). discriminate. rewrite H1 in *. 
+  rewrite (Zpos_p_nat_of_P p) in *.
+  rewrite nat_of_P_xO. apply inj_eq_rev. 
+  assert(Z_of_nat [:b] = - 2 * Z_of_nat (nat_of_P p) + pow_of_2_Z (S n)). omega.
+  rewrite H2.
+  rewrite inj_minus.
+  rewrite pow_of_2_nat_Z.
+  rewrite inj_mult. simpl Z_of_nat.
+  rewrite Zmax_right. ring.
+  omega.
+  
+  apply leb_complete_conv in e.
+  
+  case_eq_rew [: b]. 
+  simpl Z_of_nat in H0. ring_simplify in H0. Opaque pow_of_2_positive.
+  rewrite pow_of_2_Z_positive in *.
+  assert(pow_of_2_positive n = p~0%positive). noconf H0. 
+  rewrite <- H2 in e. 
+  destruct n ; simpl in *. Transparent pow_of_2_positive. simpl in H2. discriminate.
+
+  rewrite (Psize_Ppred_pow_of_2_positive n) in e. 
+  absurd_arith.
+
+  rewrite inj_S in H0.
+  assert(pow_of_2_Z n > Zpos p~0) by omega.
+  pose (pow_of_2_size _ _ H2). 
+  rewrite (Psize_pred (p~0)%positive) in e. absurd_arith.
+
+  assert(Z_of_nat [:b] = pow_of_2_Z n - 1) by omega.
+  rewrite <- Z_of_nat_of_binary_full in H1. apply inj_eq_rev in H1.
+  apply nat_of_binary_be_inj in H1. subst. reflexivity.
+
+  assert(Z_of_nat [:b] - pow_of_2_Z n < 0) by omega. 
+  generalize (pow_of_2_Z_pos n). intros.
+  generalize (Z_of_nat_pos [:b]). intros.
+  assert(pow_of_2_Z n - Z_of_nat [:b] < 0). rewrite H0.
+  apply Zlt_neg_0.
+  absurd_arith.
+
+  simpl.
+  case_eq_rew [: b]. simpl. 
+  rewrite <- (nat_of_binary_zero n) in H.
+  apply nat_of_binary_be_inj in H. subst.
+  simpl. reflexivity.
+  
+  simpl. destruct_call_eq dec. clear H0.
+  repeat f_equal.
+  destruct (binary_of_pos_be_binary_of_nat n _ (leb_complete _ _ e)).
+  destruct H0.
+  rewrite H1. rewrite nat_of_P_o_P_of_succ_nat_eq_succ in H0. rewrite <- H in H0.
+  pose (nat_of_binary_binary_of_nat_inverse _ _ _ H0). 
+  apply nat_of_binary_be_inj in e0. assumption.
+
+  clear H0.
+  apply leb_complete_conv in e.
+  generalize (nat_of_binary_bound b). intros.
+  rewrite H in H0.
+  assert(pow_of_2_Z n > Zpos (P_of_succ_nat n0)).
+  rewrite <- pow_of_2_nat_Z.
+  change (Zpos (P_of_succ_nat n0)) with (Z_of_nat (S n0)).
+  apply inj_gt. omega.
+  pose (pow_of_2_size _ _ H1). absurd_arith.
+Qed.
+  

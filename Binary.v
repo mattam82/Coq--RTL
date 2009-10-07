@@ -134,6 +134,19 @@ Proof.
   rewrite andb_b_false in x. discriminate.
 Qed.
 
+Require Import BoolEq.
+
+Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
+Proof.
+  intros. funind (binary_eq x y) eqxy. destruct recres.
+  simp binary_eq in eqxy. rewrite andb_b_true in x. rewrite x in *.
+  simpl in *. red ; intros. noconf H. rewrite bool_eq_refl in x. discriminate.
+
+  red ; intros H ; noconf H. simp binary_eq in eqxy. 
+  rewrite bool_eq_refl in *.
+  simpl in *. elim (IHbinary_eq_ind eqxy). reflexivity.
+Qed.
+
 Transparent binary_eq.
 
 Definition coerce_bits {n m} (c : bits n) (H : n = m) : bits m.
@@ -236,12 +249,6 @@ Eval compute in (binary_of_pos_be 3 (6%positive)).
 Eval compute in (binary_of_pos_be 32 (6%positive)).
 Eval compute in (binary_of_pos_be 32 (255%positive)).
 
-Fixpoint pow_of_2_positive (n : nat) : positive :=
-  match n with
-    | O => 1
-    | S n => (pow_of_2_positive n)~0
-  end.
-
 Eval compute in (binary_of_pos_be 32 (pow_of_2_positive 32 - 1)).
 
 Program Definition max_int n : bits n := 
@@ -275,4 +282,11 @@ Lemma binary_inverse_constant {n} c :
   binary_inverse (constant_vector n c) = constant_vector n (negb c).
 Proof. 
   induction n ; simpl ; intros ; auto. rewrite IHn. reflexivity.
+Qed.
+
+Lemma binary_inverse_vector_append {n m} (v : bits n) (w : bits m) :
+  binary_inverse (vector_append v w) = vector_append (binary_inverse v) (binary_inverse w).
+Proof. intros. Opaque vector_append.
+  funind (vector_append v w) vw.
+  rewrite IHvector_append_ind. reflexivity.
 Qed.

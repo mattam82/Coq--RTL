@@ -19,15 +19,18 @@ Definition one {n} : bits (S n) := vector_append_one (constant_vector n false) t
 Lemma nat_of_binary_one n : [: @one n ] = 1%nat.
 Proof. induction n ; simpl ; auto. Qed.
 
+Ltac autorew := autorewrite with pow_of_2 nat_of_P in * ; simpl.
+
 Lemma nat_of_binary_full n : [: @full n ] = pow_of_2 n - 1.
 Proof. 
-  induction n ; simpl ; auto with *. unfold full in *. rewrite IHn. omega.
+  induction n ; simpl ; auto with *. unfold full in *. rewrite IHn.
+  autorewrite with pow_of_2 in *. omega.
 Qed.
 
 Lemma nat_of_binary_bound {n} (x : bits n) : nat_of_binary_be x < pow_of_2 n.
 Proof.
   induction n ; intros. depelim x. simpl. auto.
-  depelim x. destruct a ; simpl ; auto with arith.
+  depelim x. destruct a ; simpl ; autorewrite with pow_of_2; auto with arith. 
 Qed.
 
 Lemma nat_of_binary_be_inj n (t t' : bits n) : [: t ] = [: t' ] -> t = t'.
@@ -46,6 +49,19 @@ Qed.
 Lemma nat_of_binary_be_eq_rect m n v (H : m = n) : [: eq_rect m (λ h, bits h) v n H ] = [: v ].
 Proof. simplify_dep_elim. simpl. reflexivity. Qed.
 
+Lemma nat_of_binary_be_vector_append {n m} (v : bits n) (w : bits m) :
+  ([: vector_append v w ] = pow_of_2 m * [: v ] + [: w ])%nat.
+Proof.
+  intros. funind (vector_append v w) vw.
+  rewrite mult_comm ; simpl. reflexivity.
+
+  destruct a.
+  rewrite IHvector_append_ind. 
+  rewrite pow_of_2_plus. ring.
+
+  rewrite IHvector_append_ind. reflexivity.
+Qed.
+
 (** * Inverse *)
 
 Lemma nat_of_binary_inverse {n} (x : bits n) : 
@@ -55,7 +71,6 @@ Proof.
   
     now depelim x. 
     
-    Opaque pow_of_2.
     simpl in *.
     case_eq (pow_of_2 (S n)). 
     generalize (Basics.pow_of_2_pos (S n)). absurd_arith.
@@ -66,8 +81,7 @@ Proof.
     rewrite IHn. case_eq (pow_of_2 n).
     generalize (pow_of_2_pos n). 
     intros ; elimtype False ; omega.
-    intros.
-    Transparent pow_of_2. simpl in H.
+    intros. autorewrite with pow_of_2 in H.
     rewrite H0 in H. simpl in H.
     rewrite plus_comm in H. noconf H.
     
@@ -125,8 +139,9 @@ Proof with auto with *.
   case_eq (bits_succ_be v) ; intros. rewrite H in *. 
   case_eq o0; case_eq o; simpdep.
   apply bits_succ_be_overflow in H. program_simpl. 
-  clear. induction n... simpl. rewrite plus_assoc, plus_0_r, <- plus_assoc. 
-  unfold zero in IHn. rewrite IHn. unfold full. ring.
+  clear. induction n... simpl. 
+  simp pow_of_2. rewrite <- plus_assoc. setoid_rewrite IHn. 
+  unfold full. ring.
 
   simpl. assumption.
 Qed.
@@ -216,7 +231,7 @@ Definition binary_plus_be {n} (x y : bits n) : bits n * overflow :=
   (Vnil, false) x y.
 
 Instance: Have (pow_of_2 n > 0).
-Proof. reduce_goal. simp pow_of_2. induction n ; simpl ; omega. Qed.
+Proof. reduce_goal. induction n ; simp pow_of_2 ; try omega. Qed.
 
 Opaque vfold_right2.
 
@@ -235,18 +250,19 @@ Proof.
   unfold binary_plus_be in H0. unfold bit in * ; rewrite H0 in H.
   clear H0.
   
+  simp pow_of_2.
   destruct a. destruct a0 ; noconf H ; program_simpl.
-  assert (add' >= pow_of_2 (S n)) by (subst add'; simpl; omega).
+  assert (add' >= pow_of_2 (S n)) by (subst add'; simp pow_of_2; omega).
   split. subst add'. simpl in H ; omega. destruct a1. program_simpl. rewrite H1.
   subst add'. omega. subst add'. rewrite IHt. omega.
 
-  assert (add' >= pow_of_2 (S n)) by (subst add'; simpl; omega).
-  split. simpl in H1 ; omega. rewrite H0.
+  assert (add' >= pow_of_2 (S n)) by (subst add'; simp pow_of_2; omega).
+  split. simp pow_of_2 in H1 ; omega. rewrite H0.
   subst add'. omega.
 
   destruct a0 ; noconf H ; program_simpl.
-  assert (add' >= pow_of_2 (S n)) by (subst add'; simpl; omega).
-  split. simpl in H1 ; omega. rewrite H0.
+  assert (add' >= pow_of_2 (S n)) by (subst add'; simp pow_of_2; omega).
+  split. simp pow_of_2 in H1 ; omega. rewrite H0.
   subst add'. omega.
 
   subst add'.
@@ -423,7 +439,7 @@ Qed.
 
 Lemma nat_of_binary_one_is_one n (t : bits (S n)) : nat_of_binary_be t = 1%nat -> t = one.
 Proof. induction n ; simpl ; intros ; auto. do 2 depelim t. destruct a ; simpl in * ; auto with *.
-  depelim t. destruct a.
+  depelim t. destruct a. simp pow_of_2 in x.
   generalize (pow_of_2_pos n) ; intros ; elimtype False ; omega.
   simpl in x. apply IHn in x. rewrite x. reflexivity.
 Qed.
@@ -498,7 +514,7 @@ Proof. intros.
   info funind (binary_shiftl t) shiftt generalizing t' o H. 
   destruct recres. noconf H. 
   case_eq_rew (binary_shiftl v). noconf shiftt. 
-  destruct o; destruct o1 ; simpl ; omega.
+  destruct o; destruct o1 ; simp pow_of_2 ; omega.
 Qed.
 
 Transparent binary_shiftl.
@@ -514,7 +530,7 @@ Proof. intros n t m ; revert n t ; induction m ; intros.
     specialize (IHm _ _ _ H). rewrite IHm.
     rewrite (binary_shiftl_be_correct _ _ H0).
     rewrite mult_assoc at 1. setoid_rewrite mult_comm at 2. simpl.
-    reflexivity.
+    simp pow_of_2. ring.
 Qed.
 
 Opaque binary_mult_be.
@@ -560,8 +576,7 @@ Opaque binary_shiftl_full.
 Lemma binary_shiftl_full_be_correct {n} (t : bits n) : 
   nat_of_binary_be (binary_shiftl_full t) = 2 * nat_of_binary_be t.
 Proof. intros. depind t; simp binary_shiftl_full.
-  destruct a. rewrite IHt.
-  omega.
+  destruct a. rewrite IHt. simp pow_of_2. omega.
 
   assumption.
 Qed.
@@ -570,7 +585,8 @@ Lemma binary_shiftl_full_n_be_correct {n} (t : bits n) m :
   nat_of_binary_be (binary_shiftl_n_full t m) = pow_of_2 m * nat_of_binary_be t.
 Proof. intros. depind m; simp binary_shiftl_n_full. omega.
   rewrite binary_shiftl_full_be_correct, IHm. 
-  rewrite mult_assoc. now replace (2 * pow_of_2 m) with (pow_of_2 (S m)).
+  rewrite mult_assoc. replace (2 * pow_of_2 m) with (pow_of_2 (S m)).
+  reflexivity. simp pow_of_2 ; omega.
 Qed.
 
 Hint Rewrite @binary_shiftl_full_be_correct @binary_shiftl_full_n_be_correct : binary.

@@ -272,10 +272,20 @@ Qed.
 Lemma modulo_cancel : forall n y `{Have (y > 0)}, modulo_nat (n * y) y = 0.
 Proof. intros n y H. unfold modulo_nat in *. rewrite euclid_mult. reflexivity. Qed.
 
+Require Import BinPos Pnat.
 
-Equations(nocomp) pow_of_2 (n : nat) : nat :=
-pow_of_2 O := 1 ;
-pow_of_2 (S n) := 2 * pow_of_2 n.
+Equations(nocomp) pow_of_2_positive (n : nat) : positive :=
+pow_of_2_positive O := 1%positive ;
+pow_of_2_positive (S n) := ((pow_of_2_positive n)~0)%positive.
+
+Lemma pow_of_2_positive_Sn n : pow_of_2_positive (S n) = Pmult (pow_of_2_positive n) 2.
+Proof. intros. simp pow_of_2_positive. rewrite Pmult_comm. simpl.
+  reflexivity.
+Qed.
+
+(* Equations(nocomp) pow_of_2 (n : nat) : nat := *)
+(* pow_of_2 O := 1 ; *)
+(* pow_of_2 (S n) := 2 * pow_of_2 n. *)
 
 Equations(nocomp) div2_rest (n : nat) : nat * bool :=
 div2_rest O := (0, false) ;
@@ -287,30 +297,84 @@ div2 O := 0 ;
 div2 (S O) := 0 ;
 div2 (S (S n)) := S (div2 n).
 
-Global Transparent pow_of_2.
+Global Transparent pow_of_2_positive.
 
-Lemma pow_of_2_pos n : pow_of_2 n > 0.
-Proof. induction n. auto. simpl. omega. Qed.
+Definition pow_of_2 (n : nat) := nat_of_P (pow_of_2_positive n).
 
-Hint Immediate pow_of_2_pos.
+Lemma pow_of_2_nat_pos n : pow_of_2 n > 0.
+Proof. intros. unfold pow_of_2. auto using lt_O_nat_of_P. Qed.
+Hint Immediate pow_of_2_nat_pos.
 
 Require Import ZArith.
 Open Local Scope Z_scope.
 
-Fixpoint pow_of_2_Z (n : nat) :=
-  match n with 
-    | O => 1%Z
-    | S n => Zdouble (pow_of_2_Z n)
-  end.
+Definition pow_of_2_Z (n : nat) := Zpos (pow_of_2_positive n).
 
 Lemma pow_of_2_nat_Z n : Z_of_nat (pow_of_2 n) = pow_of_2_Z n.
-Proof.
-  induction n ; simpl ; auto.
-  repeat rewrite inj_plus. repeat rewrite IHn. 
-  simpl. rewrite Zplus_0_r. rewrite Zdouble_mult. ring.
+Proof. intros. unfold pow_of_2_Z. unfold pow_of_2. rewrite Zpos_eq_Z_of_nat_o_nat_of_P. 
+  reflexivity.
 Qed.
 
 Lemma pow_of_2_Z_pos n : pow_of_2_Z n > 0.
-Proof. induction n ; simpl ; try omega.
-  case_eq_rew (pow_of_2_Z n) ; simpl ; auto.
+Proof. intros. unfold pow_of_2_Z. intros. apply Zgt_pos_0. Qed.
+
+Lemma pow_of_2_positive_plus n m : 
+  (pow_of_2_positive (n + m) = pow_of_2_positive n * pow_of_2_positive m)%positive.
+Proof. induction n ; simpl ; intros ; auto.
+  rewrite IHn. reflexivity.
 Qed.
+
+Lemma pow_of_2_nat_positive n : pow_of_2 n = nat_of_P (pow_of_2_positive n).
+Proof. reflexivity. Qed.
+
+Hint Rewrite pow_of_2_positive_Sn pow_of_2_positive_plus : pow_of_2.
+Hint Rewrite pow_of_2_nat_positive : nat_of_P.
+
+Hint Resolve lt_O_nat_of_P : nat_of_P.
+
+Hint Rewrite nat_of_P_succ_morphism nat_of_P_plus_carry_morphism 
+  Pmult_nat_l_plus_morphism nat_of_P_plus_morphism Pmult_nat_r_plus_morphism
+  nat_of_P_mult_morphism Pmult_nat_mult_permute Pmult_nat_2_mult_2_permute 
+  Pmult_nat_4_mult_2_permute nat_of_P_xH nat_of_P_xO nat_of_P_xI
+  nat_of_P_o_P_of_succ_nat_eq_succ P_of_succ_nat_o_nat_of_P_eq_succ
+  pred_o_P_of_succ_nat_o_nat_of_P_eq_id : nat_of_P.
+
+Hint Rewrite pow_of_2_nat_positive : nat_of_P_inv.
+
+Hint Rewrite <- nat_of_P_succ_morphism nat_of_P_plus_carry_morphism 
+  Pmult_nat_l_plus_morphism nat_of_P_plus_morphism Pmult_nat_r_plus_morphism
+  nat_of_P_mult_morphism Pmult_nat_mult_permute Pmult_nat_2_mult_2_permute 
+  Pmult_nat_4_mult_2_permute nat_of_P_xH nat_of_P_xO nat_of_P_xI
+  P_of_succ_nat_o_nat_of_P_eq_succ 
+  pred_o_P_of_succ_nat_o_nat_of_P_eq_id : nat_of_P_inv.
+
+Hint Rewrite nat_of_P_minus_morphism using solve [ auto ] : nat_of_P.
+
+Lemma pow_of_2_plus n m : (pow_of_2 (n + m) = pow_of_2 n * pow_of_2 m)%nat.
+Proof. unfold pow_of_2. intros. autorewrite with nat_of_P pow_of_2. reflexivity. Qed.
+
+Hint Rewrite inj_0 inj_S inj_plus inj_mult inj_min inj_max : Z_of_nat. 
+Hint Rewrite <- inj_eq_iff inj_le_iff inj_lt_iff inj_ge_iff Zpos_eq_Z_of_nat_o_nat_of_P
+  Zpos_P_of_succ_nat : Z_of_nat.
+
+Hint Resolve inj_eq inj_neq inj_le inj_gt inj_ge inj_lt : Z_of_nat.
+
+Lemma pow_of_2_Z_plus n m : pow_of_2_Z (n + m) = pow_of_2_Z n * pow_of_2_Z m.
+Proof. unfold pow_of_2_Z. intros. autorewrite with Z_of_nat nat_of_P_inv pow_of_2.
+  reflexivity. 
+Qed.
+
+Lemma pow_of_2_0 : (pow_of_2 0 = 1)%nat.
+Proof. 
+  intros. simp pow_of_2 nat_of_P. 
+Qed.
+
+Lemma pow_of_2_Sn n : (pow_of_2 (S n) = pow_of_2 n + pow_of_2 n)%nat.
+Proof. intros. simp pow_of_2 nat_of_P. ring. Qed.
+
+Hint Rewrite pow_of_2_plus pow_of_2_0 pow_of_2_Sn : pow_of_2.
+
+Lemma pow_of_2_pos n : (pow_of_2 n > 0)%nat.
+Proof. intros. simp pow_of_2 nat_of_P. auto with nat_of_P. Qed.
+
+Hint Resolve pow_of_2_pos : pow_of_2.

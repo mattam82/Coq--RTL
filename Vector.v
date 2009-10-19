@@ -52,6 +52,8 @@ vfold_right2 A B C f e ?(O) Vnil Vnil := e ;
 vfold_right2 A B C f e ?(S n) (Vcons hdv n tlv) (Vcons hdv' n tlv') := 
   f n hdv hdv' (vfold_right2 f e tlv tlv').
 
+Print  vfold_right2_obligation_2.
+
 Lemma Vcons_append_one {A n} (a : A) (v : vector A n) : exists a' v', (Vcons a v) = vector_append_one v' a'.
 Proof. intros. revert a.
   induction v.
@@ -89,7 +91,7 @@ Proof. intros. subst. reflexivity. Qed.
 
 Lemma f_JMequal2 {A B C} (f : Π x : A, B x -> C x) (x : A) (b b' : B x) : b ~= b' -> f x b ~= f x b'.
 Proof. intros. pose JMeq_rect.
-  apply (p (B x) b b' (fun b' => f x b ~= f x b')). reflexivity.
+  apply (p (B x) b (fun b' => f x b ~= f x b')). reflexivity.
   assumption.
 Qed.
 
@@ -109,7 +111,3 @@ vector_firstn A ?(S n) O (Vcons a n v) Hsl := Vnil ;
 vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
 
   Next Obligation. omega. Defined.
-
-  Next Obligation. revert s Hsl ; induction c ; intros ;
-    simp vector_firstn ; auto with * ; destruct s ; simp vector_firstn.
-  Defined.

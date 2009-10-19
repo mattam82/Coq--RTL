@@ -276,9 +276,11 @@ Proof.
   apply binary_plus_be_correct_Z in H.
   destruct_call_eq @add_bits_spec.
   noconf x.
-  destruct o. destruct H. zarith. rewrite H0. 
+  destruct o. destruct H. zarith. simpl. rewrite H0. 
   Opaque pow_of_2_Z Zminus Zmult.
-  destruct a ; destruct a0 ; noconf x ; simpl ; zarith.
+  destruct a ; destruct a0 ; noconf x ; simpl ; zarith. 
+  Transparent Zminus Zmult.
+  omega.
 
   destruct a ; destruct a0 ; noconf x ; simpl in * ; rewrite H ; zarith.
 Qed.
@@ -397,7 +399,7 @@ Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 127)).
 Hint Rewrite <- Pplus_one_succ_r : positive.
 Hint Rewrite Psucc_o_double_minus_one_eq_xO : positive.
 
-Lemma Z_of_signed_of_Z_inverse n z b :
+Theorem Z_of_signed_of_Z_inverse n z b :
   @signed_of_Z_be n z = Some b -> [Z: b] = z.
 Proof.
   intros. induction z; try noconf H; zarith.
@@ -436,7 +438,7 @@ Equations(nocomp) sx_be {n} (b : bits (S n)) (m : nat) : bits (S m + n) :=
 sx_be n (Vcons x n b) m := if x then vector_append full b 
   else Vcons false (vector_append zero b).
 
-Lemma sx_correct {n} (b : bits (S n)) m : [Z: sx_be b m] = [Z: b].
+Theorem sx_correct {n} (b : bits (S n)) m : [Z: sx_be b m] = [Z: b].
 Proof.
   intros. Opaque Z_of_signed_be. funind (sx_be b m) bm. 
   destruct a. zarith.
@@ -540,8 +542,280 @@ Proof. induction p ; simpl ; auto with arith. Qed.
 Lemma Psize_pred p : (Psize (Ppred p) <= Psize p)%nat.
 Proof. apply Prect. simpl. reflexivity.
   intros. rewrite Ppred_succ. apply Psize_succ. Qed.
+
+Definition Zsize (z : Z) :=
+  match z with
+    | Z0 => 1%nat
+    | Zpos p => Psize p
+    | Zneg p => Psize p
+  end.
+
+
+Lemma Psize_monotone : forall p q, (p <= q)%positive -> (Psize p <= Psize q)%nat.
+Proof.
+  assert (le0 : forall n, (0<=n)%nat) by (induction n; auto).
+  assert (leS : forall n m, (n<=m -> S n <= S m)%nat) by (induction 1; auto).
+  induction p; destruct q; simpl; auto; intros; try discriminate.
+  apply leS. apply IHp. 
+  intro.
+  unfold Ple in H. simpl in H.
+  apply H. rewrite Pcompare_Gt_eq_Gt. left ; auto.
+
+  unfold Ple in H. simpl in H.
+  apply leS. apply IHp. intro. apply H.
+  rewrite <- Pcompare_eq_Gt. auto.
+Qed.
+
+Hint Resolve Zgt_pos_0 : zarith.
+
+Lemma Zsize_monotone_pos : forall p q, p >= 0 -> p <= q -> (Zsize p <= Zsize q)%nat.
+Proof. intros. destruct p ; destruct q ; simpl ; auto with arith.
+  destruct p ; simpl ; auto with arith.
+  apply Psize_monotone. apply H0.
+Qed.
+
+Lemma Zsize_monotone_neg : forall p q, q <= 0 -> p <= q -> (Zsize q <= Zsize p)%nat.
+Proof. intros. destruct p ; destruct q ; simpl ; auto with arith.
+  destruct p ; simpl ; auto with arith.
+  apply Psize_monotone. unfold Zle in H0. simpl in H0. red. 
+  intro. apply ZC1 in H1. rewrite H1 in H0. simpl in H0. elim H0 ; reflexivity.
+Qed.
+
+Lemma Psucc_minus_1 p : (Psucc p - 1 = p)%positive.
+Proof. intros. rewrite <- Ppred_minus. rewrite Ppred_succ. reflexivity. Qed.
+
+Hint Rewrite pow_of_2_nat_positive : nat_of_P_inv'.
+
+Hint Rewrite <- nat_of_P_succ_morphism nat_of_P_plus_carry_morphism 
+  Pmult_nat_l_plus_morphism nat_of_P_plus_morphism Pmult_nat_r_plus_morphism
+  nat_of_P_mult_morphism Pmult_nat_mult_permute Pmult_nat_2_mult_2_permute 
+  nat_of_P_xH nat_of_P_xO nat_of_P_xI
+  Pmult_nat_4_mult_2_permute : nat_of_P_inv'.
+
+Hint Rewrite
+  pred_o_P_of_succ_nat_o_nat_of_P_eq_id : nat_of_P_inv'.
+
+Lemma pos_Zpos_eq p q : Zpos p = Zpos q -> p = q.
+Proof. intros. noconf H. Qed.
+
+(* Lemma equal_fun {A B} (f : A -> B) (x y : A) : f x = f y -> f x = f y. *)
+(* Proof. Print f_equ *)
+
+(* Lemma Psucc_minus p q : (p - q = Psucc p - Psucc q)%positive. *)
+(* Proof. *)
+(*   intros p. pattern p. apply Prect. intros. *)
+(*   simpl. destruct q ; simpl. unfold Pminus. simpl.  *)
+(*   destruct q; simpl ; auto. *)
+(*   destruct q; simpl ; auto. *)
+(*   reflexivity. *)
+
+(*   intros. *)
+(*   rewrite Pplus_one_succ_l.  *)
+(*   generalize (p0 + 1)%positive. intros. *)
+(*   rewrite <- 2 Pplus_one_succ_r. *)
+
+(*   destruct p1 ; destruct q ; simpl ; auto. compute. *)
+(*   replace ( *)
+
+(*   rewrite 2 nat_of_P_minus_morphism. *)
+(*   autorewrite with nat_of_P. zarith. *)
   
-Lemma signed_of_Z_be_Z_of_signed_inverse n (b : bits (S n)) :
+  
+
+  
+(*   rewrite <- H. *)
+  
+(*   rewrite <- H. *)
+  
+(*   rewrite H0. *)
+
+(*   apply pos_Zpos_eq. *)
+(*   rewrite Zpos_minus_distr. *)
+(*   rewrite Zpos_plus_distr. *)
+  
+  
+  
+  
+(*   About ring_theory. *)
+(*   autorewrite with nat_of_P_inv'. *)
+  
+(*   simpl. *)
+
+
+(*   destruct q ; simpl. unfold Pminus. simpl. *)
+
+
+(*   Lemma nat_of_P_minus p q : (p > q)%nat -> P_of_succ_nat (p - S q) = (P_of_succ_nat p - P_of_succ_nat q)%positive. *)
+(*   Proof. *)
+(*     induction p ; simpl ; intros ; auto with arith. *)
+(*     inversion H. *)
+    
+(*     destruct p. simpl. destruct q. reflexivity. *)
+(*     depelim H. inversion H.  *)
+
+(*     simpl. destruct q ; simpl ; auto. *)
+(*     simpl in IHp. rewrite Psucc_minus_1. *)
+(*     reflexivity. *)
+
+(*     simpl in IHp. rewrite IHp by omega. *)
+    
+(*     f_equal. *)
+    
+(*     simpl. *)
+
+(*     simpl. *)
+    
+
+
+(*     intros p. pattern p. apply Prect. intros. simpl. *)
+(*     case_eq_rew (nat_of_P q). *)
+(*     generalize (lt_O_nat_of_P q). absurd_arith. *)
+(*     Transparent Pminus. *)
+(*     destruct q ; simpl; auto with arith.  *)
+
+(*   Lemma nat_of_P_minus p q : (q < p)%positive -> nat_of_P (p - q) = (nat_of_P p - nat_of_P q)%nat. *)
+(*   Proof. *)
+(*     intros p. pattern p. apply Prect. intros. simpl. *)
+(*     case_eq_rew (nat_of_P q). *)
+(*     generalize (lt_O_nat_of_P q). absurd_arith. *)
+(*     Transparent Pminus. *)
+(*     destruct q ; simpl; auto with arith.  *)
+
+(*     intros. autorewrite with nat_of_P. *)
+(*     destruct q ; simpl; auto with arith.  *)
+(*     unfold Psucc. simpl. *)
+    
+(*     simpl. *)
+(*     rewrite nat_of_P_xI in H. noconf H.  *)
+(*     simpl in H. *)
+(*     compute in H. *)
+    
+(*     autorewrite with nat_of_P.  *)
+(*     zarith. *)
+    
+(* inversion H0. *)
+(*     rewrite <- H2. destruct q ; simpl ; auto. simpl. *)
+  
+
+(* apply Psize_monotone. *)
+(*   simpl. assert(pow_of_2 n >= S [: b])%nat by omega. *)
+
+(*   case_eq_rew [: b]. *)
+(*   clear. *)
+(*   assert(pow_of_2_positive n = P_of_succ_nat (pow_of_2 n - 1)). *)
+(*   induction n. simpl ; auto. rewrite pow_of_2_positive_Sn. rewrite IHn.  *)
+(*   simp pow_of_2. zarith.  *)
+  
+  
+  
+(*   replace (pow_of_2 (S n)) with 2 *  *)
+(*   rewrite pow_of_2_Sn.  *)
+(*   simp pow_of_2.  *)
+  
+
+(*   autorewrite with nat_of_P. *)
+  
+
+(*   simpl. destruct a. *)
+(*   autorewrite with Z_of_nat_inv. *)
+(*   apply inj_le. *)
+
+Lemma Ple_1 : forall p, (p <= 1 -> p = 1)%positive.
+Proof. intros. destruct p ; simpl ; auto. Qed.
+
+(* Lemma Ple_Plt : forall x y, (Psucc x <= y -> x < y)%positive. *)
+(* Proof. intros.  *)
+(*   red. *)
+(*   red in H. *)
+(*   case_eq_rew ((Psucc x ?= y)%positive Eq).  *)
+(*   apply Pcompare_Eq_eq in H0. subst. *)
+(*   apply Pcompare_p_Sp. *)
+
+(*   rewrite  *)
+
+(*    discriminates. *)
+
+(*   simpl. *)
+
+(*   destruct (Pcompare_p_Sq y x) as (H',_).  *)
+  
+
+(* Instance: Transitive Ple. *)
+(* Proof. red ; intros x y z. *)
+(*   pattern y. apply Pind. intros. *)
+(*   assert (H1:=Ple_1 _ H). subst x. assumption. *)
+
+(*   intros. *)
+  
+
+
+(*   set (p':= Psucc p) in *. *)
+  
+
+
+(*   induction z using Pind; intros H H0. *)
+  
+(*   red in H0. *)
+(*   destruct (Pcompare_p_Sq y z) as (H',_).  *)
+(*   destruct (H' H1); subst; auto. *)
+(*   intro. red in H. apply IHz. apply H. intro.  *)
+(*   rewrite H4 in H2. discriminate. *)
+
+(*   apply  *)
+  
+  
+(*   apply H2. *)
+
+
+(* Qed. *)
+
+(*   red in H, H0. intro. *)
+(*   apply H0. *)
+  
+
+(* Lemma P_of_succ_nat_minus x y : (P_of_succ_nat (x - y)%nat <= P_of_succ_nat x)%positive. *)
+(* Proof. *)
+(*   induction x. simpl. intros. auto.  *)
+
+(*   intros. *)
+(*   simpl. *)
+(*   destruct y ; simpl. *)
+(*   red. rewrite Pcompare_refl. auto. *)
+
+  
+
+(*   transitivity (P_of_succ_nat x). *)
+
+(*   induction x  *)
+(*   intros.  *)
+
+  
+(* Theorem Z_of_signed_size n (b : bits (S n)) : (Zsize [Z: b ] <= S n)%nat. *)
+(* Proof. *)
+(*   depelim b. *)
+(*   destruct a. rewrite signed_of_Z_be_neg. simpl. *)
+(*   transitivity (Zsize (pow_of_2_Z n)). *)
+(*   2:simp pow_of_2; rewrite pow_of_2_positive_Psize; reflexivity. *)
+(*   zarith. simp pow_of_2.   *)
+(*   apply Psize_monotone.  *)
+(*   clear. induction n  *)
+(*   autorewrite with Z_of_nat_inv. *)
+(*   zarith. simpl. *)
+(*   case_eq_rew (pow_of_2 n - [:b])%nat. simpl. destruct n ; simpl ; auto with arith. *)
+(*   simpl. apply Psize_monotone. *)
+(*   assert(n0 = pow_of_2 n - [: b] - 1)%nat by omega. *)
+(*   subst n0. *)
+(*   autorewrite with nat_of_P. *)
+(*   admit. *)
+
+(*   simpl. *)
+  
+  
+  
+
+
+
+Theorem signed_of_Z_be_Z_of_signed_inverse n (b : bits (S n)) :
   signed_of_Z_be [Z: b ] = Some b.
 Proof. intros. depelim b.
   destruct a.
@@ -650,4 +924,3 @@ Proof. intros. depelim b.
   apply inj_gt. omega.
   pose (pow_of_2_size _ _ H1). absurd_arith.
 Qed.
-  

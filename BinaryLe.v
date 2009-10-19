@@ -38,11 +38,4 @@ nat_of_binary_le ?(O) Vnil := O ;
 nat_of_binary_le ?(S n) (Vcons b n v) := let rest := nat_of_binary_le v in
   if b then 1 + 2 * rest else 2 * rest.
 
-  Next Obligation.
-  Proof. induction c. constructor.
-    rewrite nat_of_binary_le_equation_2.
-    constructor. assumption.
-  Defined.
-
 Global Transparent nat_of_binary_le.
-

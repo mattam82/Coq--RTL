@@ -348,7 +348,7 @@ Hint Rewrite pow_of_2_nat_positive : nat_of_P_inv.
 Hint Rewrite <- nat_of_P_succ_morphism nat_of_P_plus_carry_morphism 
   Pmult_nat_l_plus_morphism nat_of_P_plus_morphism Pmult_nat_r_plus_morphism
   nat_of_P_mult_morphism Pmult_nat_mult_permute Pmult_nat_2_mult_2_permute 
-  Pmult_nat_4_mult_2_permute nat_of_P_xH nat_of_P_xO nat_of_P_xI
+  Pmult_nat_4_mult_2_permute 
   P_of_succ_nat_o_nat_of_P_eq_succ 
   pred_o_P_of_succ_nat_o_nat_of_P_eq_id : nat_of_P_inv.
 

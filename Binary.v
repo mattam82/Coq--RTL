@@ -55,27 +55,47 @@ Equations(nocomp) binary_eq {n} (x y : bits n) : bool :=
 binary_eq ?(0) Vnil Vnil := true ;
 binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
 
+Ltac funind' c :=
+  match c with
+    appcontext C [ ?f ] => 
+      let x := constr:(fun_ind_prf (f:=f)) in
+        (let prf := eval simpl in x in
+         let p := context C [ prf ] in
+         let prf := fresh in
+         let call := fresh in
+           assert(prf:=p) ;
+           (* Abstract the call *)
+           set(call:=c) in *; move prf at top ; revert_until prf;
+           (* Now do dependent elimination and simplifications *)
+           depind prf ; simplify_dep_elim ; simplify_IH_hyps)
+           (* Use the simplifiers for the constant to get a nicer goal. *)
+           (* try simpc f ; try on_last_hyp *)
+           (*   ltac:(fun id => rename id into Hcall)) *)
+        || fail 1 "Internal error in funind"
+  end || fail "Maybe you didn't declare the functional induction principle for" c.
+
 Lemma binary_eq_refl n (b : bits n) : binary_eq b b = true.
-Proof. intros. remember b as b'. rewrite Heqb' at 1. funind (binary_eq b b') foo. 
-  rewrite bool_eq_refl. rewrite IHbinary_eq_ind. reflexivity.
-  simp binary_eq in foo. rewrite bool_eq_refl in foo. assumption.
+Proof. intros.
+  funind' (binary_eq b b). reflexivity.
+  rewrite bool_eq_refl. simpl ; auto.
 Qed.
+  
+Ltac depelim_term c := 
+  let H := fresh in remember c as H ; depelim H.
 
 Instance const_eq : EqDec (bits n) eq.
 Proof. 
-intros n. red. intros. case_eq (binary_eq x y) ; [ left | right ].
+intros n. red. intros. case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
 
-  funind (binary_eq x y) foo. reflexivity.
-  red. rewrite andb_true_iff in x. destruct x.
-  specialize (IHbinary_eq_ind H1).
-  apply bool_eq_ok in H. subst.
-  simp binary_eq in foo. rewrite bool_eq_refl in foo. 
-  specialize (IHbinary_eq_ind foo). congruence.
+  funind' (binary_eq x y). reflexivity.
+  depelim_term (binary_eq v v0). 
+  rewrite andb_true_iff in eqxy. destruct eqxy as [eqxy _].
+  apply bool_eq_ok in eqxy. subst. rewrite IHbinary_eq_ind. congruence.
+  rewrite andb_true_iff in eqxy. intuition. 
 
-  funind (binary_eq x y) foo. red ; intros.
-  red in H. noconf H. simp binary_eq in foo.
-  rewrite bool_eq_refl, binary_eq_refl in foo.
-  simpl in foo. discriminate.
+  funind' (binary_eq x y).
+  red in H0; noconf H0.
+  rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
 Qed.
 
 Equations(nocomp) binary_shiftl {n} (t : bits n) : bits n * overflow :=
@@ -126,25 +146,21 @@ Qed.
 
 Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
 Proof.
-  intros. funind (binary_eq x y) eqxy. destruct recres.
-  simp binary_eq in eqxy. rewrite andb_b_true in x. rewrite x in *.
-  simpl in *. rewrite eqxy in IHbinary_eq_ind. apply bool_eq_ok in x. subst.
-  rewrite IHbinary_eq_ind by auto. reflexivity.
+  intros. funind' (binary_eq x y). reflexivity.
+  
+  depelim_term (binary_eq v v0). subst. 
+  rewrite andb_b_true in H.
+  apply bool_eq_ok in H. subst. reflexivity.
 
-  rewrite andb_b_false in x. discriminate.
+  rewrite andb_b_false in H. discriminate.
 Qed.
 
 Require Import BoolEq.
 
 Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
 Proof.
-  intros. funind (binary_eq x y) eqxy. destruct recres.
-  simp binary_eq in eqxy. rewrite andb_b_true in x. rewrite x in *.
-  simpl in *. red ; intros. noconf H. rewrite bool_eq_refl in x. discriminate.
-
-  red ; intros H ; noconf H. simp binary_eq in eqxy. 
-  rewrite bool_eq_refl in *.
-  simpl in *. elim (IHbinary_eq_ind eqxy). reflexivity.
+  intros. funind' (binary_eq x y). 
+  noconf H1. rewrite bool_eq_refl, binary_eq_refl in H. discriminate.
 Qed.
 
 Transparent binary_eq.
@@ -255,7 +271,7 @@ Program Definition max_int n : bits n :=
   match n with O => (@zero 0) | S n => (@binary_of_pos_be (S n) (pow_of_2_positive (S n) - 1) _) end.
 
   Next Obligation. red. induction n0. simpl. auto. 
-    simpl. case_eq_rew (pow_of_2_positive n0); simpl in *; omega.
+    simpl. case_eq_rew (pow_of_2_positive n0) ppow; simpl in *; omega.
   Qed.
 
 Eval compute in (max_int 32).

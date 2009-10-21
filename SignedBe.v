@@ -198,13 +198,12 @@ Lemma two_s_complement_correct {n} (x : bits (S n)) compl o : two_s_complement x
 Proof. unfold two_s_complement.
   intros.
   Opaque bits_succ_be.
-  destruct_call_eq @bits_succ_be.
-  
-  apply bits_succ_be_correct_Z in H0.
+  destruct_call_eq @bits_succ_be sinvx.
+  apply bits_succ_be_correct_Z in sinvx.
   noconf H. zarith.
   depelim x ; depelim compl ; simpl in *.
   destruct a ; destruct a0 ; simpl in * ; try rewrite H0 ; zarith.
-  destruct H0. noconf H ; noconf H0.
+  destruct sinvx as [H H0]. noconf H ; noconf H0.
   apply binary_inverse_is_constant in x. subst. now auto.
 Qed.
 
@@ -245,14 +244,13 @@ Qed.
 Lemma signed_plus_be_correct n : forall (t t' : bits (S n)) tt', signed_plus_be t t' = (tt', false) ->
   Z_of_signed_be tt' = Z_of_signed_be t + Z_of_signed_be t'.
 Proof.
-  intros.
-  funind (signed_plus_be t t') stt'. depelim tt'.
-  destruct_call_eq @binary_plus_be.
-  rewrite add_bits_correct in x.
-  destruct_call_eq @add_bits_spec.
-  noconf x.
-  apply binary_plus_be_correct_Z in H.
-  destruct o; [destruct H|] ; destruct a ; destruct a0 ; noconf x ; simpl in * ; zarith.
+  intros. funind' (signed_plus_be t t'). depelim tt'.
+  destruct_call_eq @binary_plus_be plusvv0.
+  rewrite add_bits_correct in H.
+  destruct_call_eq @add_bits_spec addaa0o.
+  noconf H.
+  apply binary_plus_be_correct_Z in plusvv0.
+  destruct o; [destruct plusvv0|] ; destruct a ; destruct a0 ; noconf x ; simpl in * ; zarith.
 Qed.
 
 (** If there is an overflow, the sign depends on the sign of the result. *)
@@ -268,21 +266,20 @@ Hint Rewrite Z_of_sign_0 Z_of_sign_1 : zarith.
 Lemma signed_plus_be_overflow n : forall (t t' : bits (S n)) tt', signed_plus_be t t' = (tt', true) ->
   Z_of_signed_be tt' + Z_of_sign (negb (Vhead tt')) * pow_of_2_Z (S n) = Z_of_signed_be t + Z_of_signed_be t'.
 Proof.
-  intros. 
-  funind (signed_plus_be t t') plustt'.
+  intros. funind' (signed_plus_be t t').
   depelim tt'.
-  destruct_call_eq @binary_plus_be.
-  rewrite add_bits_correct in x.
-  apply binary_plus_be_correct_Z in H.
-  destruct_call_eq @add_bits_spec.
-  noconf x.
-  destruct o. destruct H. zarith. simpl. rewrite H0. 
+  destruct_call_eq @binary_plus_be plusvv0.
+  rewrite add_bits_correct in H.
+  apply binary_plus_be_correct_Z in plusvv0.
+  destruct_call_eq @add_bits_spec aa0o.
+  noconf H.
+  destruct o. destruct plusvv0. zarith. simpl. rewrite H0. 
   Opaque pow_of_2_Z Zminus Zmult.
   destruct a ; destruct a0 ; noconf x ; simpl ; zarith. 
   Transparent Zminus Zmult.
   omega.
 
-  destruct a ; destruct a0 ; noconf x ; simpl in * ; rewrite H ; zarith.
+  destruct a ; destruct a0 ; noconf x ; simpl in * ; rewrite plusvv0 ; zarith.
 Qed.
 
 (** Signed substraction [signed_plus_be] is just addition of the opposite. *)
@@ -300,13 +297,13 @@ Lemma signed_minus_be_correct {n} (x y t : bits (S n)) b : signed_minus_be x y =
   else Z_of_signed_be t = (Z_of_signed_be x - Z_of_signed_be y).
 Proof.
   intros. unfold signed_minus_be in H.
-  destruct_call_eq @two_s_complement.
-  apply two_s_complement_correct in H0.
+  destruct_call_eq @two_s_complement comply.
+  apply two_s_complement_correct in comply.
   depelim b0. depelim t.
   destruct b. destruct b1.
   noconf H. 
 
-  destruct H0. unfold min_signed. noconf H. 
+  destruct comply. unfold min_signed. noconf H. 
   
   apply signed_plus_be_overflow in H.
   depelim x. depelim y.
@@ -327,7 +324,7 @@ Proof.
   rewrite H. ring.
 
   destruct b1. noconf H.
-  apply signed_plus_be_correct in H. rewrite H, H0. omega.
+  apply signed_plus_be_correct in H. rewrite H, comply. omega.
 Qed.
 
 Lemma nat_of_binary_be_vector_append_one {n} (b : bits n) c :
@@ -404,13 +401,13 @@ Theorem Z_of_signed_of_Z_inverse n z b :
 Proof.
   intros. induction z; try noconf H; zarith.
   simpl in H.
-  case_eq_rew (dec (leb (Psize p) n)). noconf H.
+  case_eq_rew (dec (leb (Psize p) n)) lepn. noconf H.
   simpl. rewrite nat_of_binary_of_pos_be. 
   apply* Zpos_eq_Z_of_nat_o_nat_of_P.
   discriminate.
 
   simpl in H.
-  case_eq_rew (dec (leb (Psize (Ppred p)) n)). 
+  case_eq_rew (dec (leb (Psize (Ppred p)) n)) lepn. 
   destruct p; noconf H; zarith.
   simpl. zarith. 
 
@@ -423,7 +420,7 @@ Qed.
 Lemma signed_of_Z_be_neg {n} (b : bits n) : [Z: true |:| b] = Zneg (P_of_succ_nat [: binary_inverse b]).
 Proof.
   intros. simpl.
-  case_eq_rew ([: binary_inverse b]). 
+  case_eq_rew ([: binary_inverse b]) ninvb. 
   zarith.
 
   simpl. zarith.
@@ -476,23 +473,23 @@ Proof.
   simpl. destruct n. inversion Hs. simpl. exists (vector_append_one (@zero n) 1%bin). split ; reflexivity.
   
   rewrite nat_of_P_succ_morphism.
-  simpl. destruct_call_eq nat_of_P. 
+  simpl. destruct_call_eq nat_of_P np0. 
   generalize (lt_O_nat_of_P p0). absurd_arith.
-  destruct (H (psize_psucc Hs)). 
-  destruct H1. subst. exists (binary_of_pos_be n (Psucc p0)). rewrite H1. 
-  destruct_call_eq @bits_succ_be.
+  destruct (H (psize_psucc Hs)) as [b [H0 H1] ].
+  subst. exists (binary_of_pos_be n (Psucc p0)). 
+  rewrite H0. destruct_call_eq @bits_succ_be sucp0.
   
   destruct o. 
-  apply bits_succ_be_overflow in H2.
-  destruct H2. subst. 
+  apply bits_succ_be_overflow in sucp0.
+  destruct sucp0 as [bz pf]. subst. 
   remember (binary_of_pos_be n (Psucc p0)).
   apply (f_equal nat_of_binary_be) in Heqb. rewrite binary_of_pos_be_Psucc in Heqb.
-  rewrite H3 in Heqb. rewrite nat_of_binary_full in Heqb. 
+  rewrite pf in Heqb. rewrite nat_of_binary_full in Heqb. 
   zarith.
 
-  apply bits_succ_be_correct in H2.
+  apply bits_succ_be_correct in sucp0.
   split. f_equal. 
-  apply nat_of_binary_be_inj. rewrite H2. 
+  apply nat_of_binary_be_inj. rewrite sucp0. 
   rewrite binary_of_pos_be_Psucc. reflexivity.
   reflexivity.
 Qed.
@@ -822,17 +819,17 @@ Proof. intros. depelim b.
 
   simpl. zarith. 
   autorewrite with Z_of_nat_inv. 
-  case_eq_rew (Z_of_nat (S (pow_of_2 n) - S [: b])); try absurd_arith.
-  simpl in H. rewrite inj_minus1 in H by auto. absurd_arith. simpl in H.
-  rewrite inj_minus1 in H by auto.
+  case_eq_rew (Z_of_nat (S (pow_of_2 n) - S [: b])) zb; try absurd_arith.
+  simpl in zb. rewrite inj_minus1 in zb by auto. absurd_arith. simpl in zb.
+  rewrite inj_minus1 in zb by auto.
   simpl. destruct p. destruct_call dec. zarith.
   pose (binary_of_pos_be_binary_of_nat n _ (leb_complete _ _ e)).
-  destruct e0. destruct H0. rewrite H1.
+  destruct e0 as [b' [H0 H1] ]. rewrite H1.
   repeat f_equal.
   simpl in H0. 
   autorewrite with nat_of_P in H0. 
   assert(Z_of_nat [:b] = pow_of_2_Z n - (2 * Zpos p + 1)) by omega.
-  apply nat_of_binary_be_inj. apply inj_eq_rev. rewrite H2.
+  apply nat_of_binary_be_inj. apply inj_eq_rev. rewrite H.
   zarith. 
   rewrite (nat_of_binary_binary_of_nat_inverse _ _ _ H0).
   zarith.
@@ -841,19 +838,19 @@ Proof. intros. depelim b.
   assert (pow_of_2_Z n >= Zpos p~1) by zarith.
   assert (pow_of_2_Z n > Zpos p~0). apply Zlt_succ_gt.
   simpl. omega.
-  pose (pow_of_2_size _ _ H1). simpl in g. absurd_arith.
+  pose (pow_of_2_size _ _ H0). simpl in g. absurd_arith.
 
   destruct_call dec. repeat f_equal.
-  rewrite Zpos_xO in H. 
+  rewrite Zpos_xO in zb. 
   destruct (binary_of_pos_be_binary_of_nat n _ (leb_complete _ _ e)).
-  destruct H0.
-  apply nat_of_binary_binary_of_nat_inverse in H0. 
+  destruct H as [H H'].
+  apply nat_of_binary_binary_of_nat_inverse in H. 
   zarith. 
   apply nat_of_binary_be_inj. zarith. 
-  rewrite <- H0. rewrite <- H1.
+  rewrite <- H. rewrite <- H'.
   zarith. apply inj_eq_rev. 
-  assert(Z_of_nat [:b] = - 2 * Zpos p + pow_of_2_Z n) by omega.
-  rewrite H2.
+  assert(Zb:Z_of_nat [:b] = - 2 * Zpos p + pow_of_2_Z n) by omega.
+  rewrite Zb.
   rewrite inj_minus.
   rewrite pow_of_2_nat_Z. zarith.
   zarith.
@@ -866,61 +863,56 @@ Proof. intros. depelim b.
   
   apply leb_complete_conv in e.
     
-  case_eq_rew [: b].
-  Transparent Z_of_nat. simpl in H. zarith.
-  unfold pow_of_2_Z in H. noconf H.
+  case_eq_rew [: b] nb.
+  Transparent Z_of_nat. simpl in nb. zarith.
+  unfold pow_of_2_Z in zb. noconf zb.
   rewrite <-x in e.
   destruct n. simpl in *. noconf x.
   rewrite (Psize_Ppred_pow_of_2_positive n) in e. 
   absurd_arith.
   
-  autorewrite with pow_of_2 Z_of_nat in H.
-  assert(pow_of_2_Z n > Zpos p~0) by omega.
-  pose (pow_of_2_size _ _ H1).
+  autorewrite with pow_of_2 Z_of_nat in zb.
+  assert(npos:pow_of_2_Z n > Zpos p~0) by omega.
+  pose (pow_of_2_size _ _ npos).
   rewrite (Psize_pred (p~0)%positive) in e. absurd_arith.
 
-  autorewrite with pow_of_2 Z_of_nat in H.
+  autorewrite with pow_of_2 Z_of_nat in zb.
   assert(Z_of_nat [:b] = pow_of_2_Z n - 1) by omega.
-  rewrite <- Z_of_nat_of_binary_full in H0. apply inj_eq_rev in H0. inject H0.
+  rewrite <- Z_of_nat_of_binary_full in H. apply inj_eq_rev in H. inject H.
   reflexivity.
 
   assert(Z_of_nat [:b] - pow_of_2_Z n < 0) by omega. 
   generalize (pow_of_2_Z_pos n). intros.
   generalize (Z_of_nat_pos [:b]). intros.
   assert(pow_of_2_Z n - Z_of_nat [:b] < 0).
-  rewrite inj_minus1 in H by auto.
-  autorewrite with Z_of_nat pow_of_2 in H.
+  rewrite inj_minus1 in zb by auto.
+  autorewrite with Z_of_nat pow_of_2 in zb.
   pose (Zlt_neg_0 p). absurd_arith.
 
-  simpl in H.
-  rewrite inj_minus1 in H by auto.
-  simpl.
-  case_eq_rew [: b]. simpl.
-  simpl in H. zarith.
-  absurd_arith.
+  simpl in zb. rewrite inj_minus1 in zb by auto.
+  simpl. case_eq_rew [: b] nb. simpl.
+  simpl in H. zarith. absurd_arith.
 
-  zarith.
-  simpl.
-  case_eq_rew ([: b]).
-  simpl. rewrite <- (nat_of_binary_zero n) in H. inject H.
+  zarith. simpl.
+  case_eq_rew ([: b]) nb.
+  simpl. rewrite <- (nat_of_binary_zero n) in nb. inject nb.
   reflexivity.
 
   simpl Z_of_nat.
   simpl.
   destruct_call dec.
   repeat f_equal. zarith.
-  destruct (binary_of_pos_be_binary_of_nat n _ (leb_complete _ _ e)).
-  destruct H0.
-  rewrite H1. rewrite nat_of_P_o_P_of_succ_nat_eq_succ in H0. rewrite <- H in H0.
+  destruct (binary_of_pos_be_binary_of_nat n _ (leb_complete _ _ e)) as [ b' [H0 H1] ].
+  rewrite H1. rewrite nat_of_P_o_P_of_succ_nat_eq_succ in H0. rewrite <- nb in H0.
   pose (nat_of_binary_binary_of_nat_inverse _ _ _ H0). 
   apply nat_of_binary_be_inj in e0. assumption.
 
   apply leb_complete_conv in e.
   generalize (nat_of_binary_bound b). intros.
-  rewrite H in H0.
+  rewrite nb in H.
   assert(pow_of_2_Z n > Zpos (P_of_succ_nat n0)).
   rewrite <- pow_of_2_nat_Z.
   change (Zpos (P_of_succ_nat n0)) with (Z_of_nat (S n0)).
   apply inj_gt. omega.
-  pose (pow_of_2_size _ _ H1). absurd_arith.
+  pose (pow_of_2_size _ _ H0). absurd_arith.
 Qed.

@@ -7,13 +7,13 @@ Class Injective {A B} (f : A -> B) :=
 Ltac inject H := apply injective in H ; subst.
 
 Ltac case_eq_rew :=
-  fun x => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
-    on_last_hyp ltac:(fun H => try rewrite H in *).
+  fun x H => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
+    on_last_hyp ltac:(fun id => rename id into H ; try rewrite H in *).
 
-Ltac destruct_call_eq f := 
+Ltac destruct_call_eq f id := 
   match goal with
-    | |- ?T => on_application f ltac:(fun app => case_eq_rew app) T
-    | H : ?T |- _ => on_application f ltac:(fun app => case_eq_rew app) T
+    | |- ?T => on_application f ltac:(fun app => case_eq_rew app id) T
+    | H : ?T |- _ => on_application f ltac:(fun app => case_eq_rew app id) T
   end.
 
 Tactic Notation "funind" constr(c) ident(Hcall) :=

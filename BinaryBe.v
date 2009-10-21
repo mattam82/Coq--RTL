@@ -56,10 +56,10 @@ Proof. simplify_dep_elim. simpl. reflexivity. Qed.
 Lemma nat_of_binary_be_vector_append {n m} (v : bits n) (w : bits m) :
   ([: vector_append v w ] = pow_of_2 m * [: v ] + [: w ])%nat.
 Proof.
-  intros. funind (vector_append v w) vw.
+  intros. funind' (vector_append v w).
   rewrite mult_comm ; simpl. reflexivity.
 
-  destruct a.
+  destruct a; simpl.
   rewrite IHvector_append_ind. 
   rewrite pow_of_2_plus. ring.
 
@@ -114,15 +114,14 @@ bits_succ_be (S n) (Vcons false n v) := let (v', rest) := bits_succ_be v in
 Lemma bits_succ_be_overflow (t : nat) (b : bits t) (c : bits t) : bits_succ_be b = (c, true) ->
   c = zero /\ b = full.
 Proof with auto with *.
-  intros. Opaque bits_succ_be. funind (bits_succ_be b) indbits.
+  intros. Opaque bits_succ_be. funind' (bits_succ_be b).
 
     now depelim c.
 
-    destruct recres. destruct o... simpdep.
-    simp bits_succ_be in indbits. 
-    destruct_call @bits_succ_be. destruct o ; simpdep... intuition (repeat subst ; auto).
+    destruct_call @bits_succ_be. 
+    destruct o ; simpdep... intuition (repeat subst ; auto).
 
-    destruct recres. destruct o...
+    destruct_call @bits_succ_be ; destruct o...
 Qed.
 
 Lemma bits_succ_be_ne n (y : bits n) b' : bits_succ_be (binary_inverse y) = (b', true) -> y = zero.
@@ -135,23 +134,19 @@ Lemma bits_succ_be_correct (t : nat) (b : bits t) (c : bits t) : bits_succ_be b 
 Proof with auto with *.
   intros.
   Opaque bits_succ_be nat_of_binary_be.
-  funind (bits_succ_be b) indbits.
+  funind' (bits_succ_be b).
      
-  destruct recres. destruct o. noconf x. noconf x.
-  simp bits_succ_be in indbits. case_eq_rew (bits_succ_be v).
-  destruct o; simpdep. 
+  destruct_call @bits_succ_be.
+  destruct o; noconf H. 
   Transparent nat_of_binary_be. simpl.
   rewrite IHbits_succ_be_ind. ring.
 
-  destruct recres. simp bits_succ_be in indbits.
-  case_eq (bits_succ_be v) ; intros. rewrite H in *. 
-  case_eq o0; case_eq o; simpdep.
-  apply bits_succ_be_overflow in H. program_simpl. 
+  case_eq_rew (bits_succ_be v) sv.
+  destruct o; noconf H. 
+  apply bits_succ_be_overflow in sv. destruct sv ; subst.
   clear. induction n... simpl. 
-  simp pow_of_2. rewrite <- plus_assoc. setoid_rewrite IHn. 
+  simp pow_of_2. rewrite <- plus_assoc. setoid_rewrite IHn. simpl.
   unfold full. ring.
-
-  simpl. assumption.
 Qed.
 
 (** * Partial injection from [nat] to unsigned. *)
@@ -191,7 +186,7 @@ Transparent binary_of_nat_be.
 
 Lemma nat_of_binary_binary_of_nat_inverse n (t : nat) (b : bits t) : binary_of_nat_be t n = Some b ->
   nat_of_binary_be b = n.
-Proof with auto with *. intros n t b Htb. generalize dependent t. induction n ; intros...
+Proof with auto. intros n t b Htb. generalize dependent t. induction n ; intros...
 
   induction t... simpl in Htb. noconf Htb. 
   noconf Htb.
@@ -199,15 +194,14 @@ Proof with auto with *. intros n t b Htb. generalize dependent t. induction n ; 
   simpl in *. destruct n.
   destruct t... simpdep. clear. induction t...
 
-  case_eq (binary_of_nat_be t (S n)); [intros b' Hb'Sn | intros Hb'Sn ].
-  rewrite Hb'Sn in Htb.
-  specialize (IHn _ _ Hb'Sn).
+  case_eq_rew (binary_of_nat_be t (S n)) bSn.
+  specialize (IHn _ _ bSn).
 
-  case_eq (bits_succ_be b'); intros sb bo Hsb.
-  rewrite Hsb in *. destruct bo... program_simpl.
-  now apply bits_succ_be_correct in Hsb.
+  case_eq_rew (bits_succ_be b0) sb0.
+  destruct o ; noconf Htb.
+  apply bits_succ_be_correct in sb0. rewrite sb0. now rewrite IHn.
 
-  now rewrite Hb'Sn in *.
+  discriminate.
 Qed.
 
 Hint Rewrite nat_of_binary_binary_of_nat_inverse using solve [ auto ] : binary.
@@ -259,9 +253,9 @@ Proof.
   destruct o.
   unfold binary_plus_be in H.
   simp vfold_right2 in H.
-  case_eq_rew (binary_plus_be t t'). specialize (IHt _ _ _ H0).
-  unfold binary_plus_be in H0. unfold bit in * ; rewrite H0 in H.
-  clear H0.
+  case_eq_rew (binary_plus_be t t') plustt'. specialize (IHt _ _ _ plustt').
+  unfold binary_plus_be in plustt'. unfold bit in * ; rewrite plustt' in H.
+  clear plustt'.
   
   simp pow_of_2.
   destruct a. destruct a0 ; noconf H ; program_simpl.
@@ -299,10 +293,10 @@ Lemma bits_succ_vector_append_0 : Π (n : nat) (v : vector bit n),
   (vector_append_one v 1%bin, 0%bin).
 Proof. intros.
   Opaque vector_append_one bits_succ_be. 
-  funind (vector_append_one v false) appv.
-  destruct a.
-  simp bits_succ_be. rewrite IHvector_append_one_ind. reflexivity.
-  simp bits_succ_be. rewrite IHvector_append_one_ind. reflexivity.
+  funind' (vector_append_one v false).
+  simp bits_succ_be.
+  destruct a; simp bits_succ_be; 
+  rewrite IHvector_append_one_ind; reflexivity.
 Qed.
 
 Hint Rewrite bits_succ_vector_append_0 : binary.
@@ -376,7 +370,7 @@ Proof.
 
     destruct a ; destruct a0; simp binary_minus_be_carry in H.
     depelim t. specialize (IHn x y t).
-    case_eq_rew (binary_minus_be_carry x y c).
+    case_eq_rew (binary_minus_be_carry x y c) minusxy.
     noconf H. destruct c; simpl ; try rewrite IHn ; simpl. 
     ring_simplify. omega.
 
@@ -384,45 +378,45 @@ Proof.
 
     clear IHn.
     destruct c ; try noconf H. simpl.
-    case_eq_rew (binary_plus_be (binary_inverse y) x).
-    noconf H. apply binary_plus_be_correct_full in H0. 
-    rewrite ! nat_of_binary_inverse in H0. simpl.
-    destruct o. destruct H0. rewrite H0.
+    case_eq_rew (binary_plus_be (binary_inverse y) x) plusyx.
+    noconf H. apply binary_plus_be_correct_full in plusyx. 
+    rewrite ! nat_of_binary_inverse in plusyx. simpl.
+    destruct o. destruct plusyx as [bound eq]. rewrite eq.
     ring_simplify. generalize (nat_of_binary_bound x). generalize (nat_of_binary_bound y).
     intros. omega.
     
-    rewrite H0. generalize (nat_of_binary_bound x). generalize (nat_of_binary_bound y).
+    rewrite plusyx. generalize (nat_of_binary_bound x). generalize (nat_of_binary_bound y).
     intros. omega.
 
-    case_eq_rew (bits_succ_be (binary_inverse y)).
-    destruct o. apply bits_succ_be_ne in H0. subst y. rewrite nat_of_binary_zero.
+    case_eq_rew (bits_succ_be (binary_inverse y)) sy.
+    destruct o. apply bits_succ_be_ne in sy. subst y. rewrite nat_of_binary_zero.
     noconf H. simpl. omega.
 
-    case_eq_rew (binary_plus_be b x); noconf H. 
-    apply binary_plus_be_correct_full in H1. 
-    apply bits_succ_be_correct in H0.
-    simpl. rewrite H0 in H1. rewrite ! nat_of_binary_inverse in H1.
+    case_eq_rew (binary_plus_be b x) bx; noconf H. 
+    apply binary_plus_be_correct_full in bx. 
+    apply bits_succ_be_correct in sy.
+    simpl. rewrite sy in bx. rewrite ! nat_of_binary_inverse in bx.
     pose (nat_of_binary_bound x). 
     pose (nat_of_binary_bound y).
-    destruct o. simpl. destruct H1. rewrite H1.
+    destruct o. simpl. destruct bx as [bound eq]; rewrite eq.
     replace (S (pow_of_2 n - S (nat_of_binary_be y))) with (pow_of_2 n - nat_of_binary_be y) by omega.
     rewrite minus_plus_lt by omega.
     rewrite minus_plus_lt2 by omega.
     omega.
 
-    rewrite H1.
+    rewrite bx.
     replace (S (pow_of_2 n - S (nat_of_binary_be y))) with (pow_of_2 n - nat_of_binary_be y) by omega.
     omega.
     
     destruct c.
     clear IHn.
-    destruct_call_eq @binary_plus_be; noconf H.  
-    destruct_call_eq @bits_succ_be. destruct o ; try noconf H.  
-    destruct_call_eq @binary_plus_be; noconf H.  
+    destruct_call_eq @binary_plus_be invxy; noconf H.  
+    destruct_call_eq @bits_succ_be sinvx. destruct o ; try noconf H.
+    destruct_call_eq @binary_plus_be by; noconf H.
 
-    case_eq_rew (binary_minus_be_carry x y c).
+    case_eq_rew (binary_minus_be_carry x y c) minusxy.
     noconf H.
-    simpl. apply (IHn _ _ _ H0). 
+    simpl. apply (IHn _ _ _ minusxy).
 Qed.
 
 Lemma binary_minus_correct {n} (x y t : bits n) : binary_minus_be x y = (t, false) -> 
@@ -447,10 +441,11 @@ Proof. unfold binary_minus_be.
   simpl in H.
   destruct_call @bits_succ_be. destruct o. discriminate.
   destruct_call @binary_plus_be. discriminate.
-  case_eq_rew (binary_minus_be_carry t (vector_append_one (constant_vector n 0) 1) 0).
+  case_eq_rew (binary_minus_be_carry t (vector_append_one (constant_vector n 0) 1) 0)
+    minust.
   unfold bit in H.
-  rewrite H0 in H. noconf H.
-  apply IHn in H0. subst. reflexivity.
+  rewrite minust in H. noconf H.
+  apply IHn in minust. subst. reflexivity.
 Qed.
 
 Lemma nat_of_binary_one_is_one n (t : bits (S n)) : nat_of_binary_be t = 1%nat -> t = one.
@@ -467,10 +462,9 @@ Proof.
   destruct n. now depelim t.
 
   unfold zero in *. 
-  funind (nat_of_binary_be t) foo. subst rest.
-  destruct a. generalize (pow_of_2_pos n). intros. elimtype False. omega. 
-  depind v. reflexivity. simpl. f_equal. f_equal. 
-  specialize (IHnat_of_binary_be_ind foo). congruence.
+  funind' (nat_of_binary_be t). subst rest.
+  destruct a. generalize (pow_of_2_pos n). absurd_arith.
+  rewrite <- (nat_of_binary_zero n) in Heqtmp. inject Heqtmp. reflexivity.
 
   Opaque nat_of_binary_be.
   depelim t. 
@@ -529,10 +523,9 @@ Lemma binary_shiftl_be_correct {o} {n} (t : bits n) t' : binary_shiftl t = (t', 
   if o then pow_of_2 n + nat_of_binary_be t' = 2 * nat_of_binary_be t
   else nat_of_binary_be t' = 2 * nat_of_binary_be t.
 Proof. intros. 
-  info funind (binary_shiftl t) shiftt generalizing t' o H. 
-  destruct recres. noconf H. 
-  case_eq_rew (binary_shiftl v). noconf shiftt. 
-  destruct o; destruct o1 ; simp pow_of_2 ; omega.
+  funind' (binary_shiftl t). reflexivity.
+  case_eq_rew (binary_shiftl v) shiftv. noconf H.
+  simpl. destruct o; destruct o0 ; simp pow_of_2 ; try omega.
 Qed.
 
 Transparent binary_shiftl.
@@ -544,9 +537,9 @@ Proof. intros n t m ; revert n t ; induction m ; intros.
     simp binary_shiftl_n in H. noconf H.
 
     simp binary_shiftl_n in H. 
-    case_eq_rew (binary_shiftl t). destruct o. noconf H. 
+    case_eq_rew (binary_shiftl t) shiftlt. destruct o. noconf H. 
     specialize (IHm _ _ _ H). rewrite IHm.
-    rewrite (binary_shiftl_be_correct _ _ H0).
+    rewrite (binary_shiftl_be_correct _ _ shiftlt).
     rewrite mult_assoc at 1. setoid_rewrite mult_comm at 2. simpl.
     simp pow_of_2. ring.
 Qed.
@@ -561,18 +554,17 @@ Proof.
 
   simp binary_mult_be in H.
   destruct a. 
-  case_eq (binary_shiftl_n y n0) ; intros. rewrite H0 in *.
-  case_eq_rew (binary_mult_be x y). 
+  case_eq_rew (binary_shiftl_n y n0) shiftlyn0.
+  case_eq_rew (binary_mult_be x y) multxy. 
   destruct o ; try noconf H.
-  destruct o0. noconf H.
-  specialize (IHx _ _ H1).
-  apply binary_shiftl_n_be_correct in H0.
+  destruct o0; try noconf H.
+  specialize (IHx _ _ multxy).
+  apply binary_shiftl_n_be_correct in shiftlyn0.
   apply binary_plus_be_correct in H.
   rewrite H.
-  rewrite <- IHx. rewrite H0. ring.
+  rewrite <- IHx. rewrite shiftlyn0. ring.
 
-  specialize (IHx _ _ H).
-  assumption.
+  auto.
 Qed.
 Transparent binary_mult_be.
 
@@ -594,6 +586,7 @@ Opaque binary_shiftl_full.
 Lemma binary_shiftl_full_be_correct {n} (t : bits n) : 
   nat_of_binary_be (binary_shiftl_full t) = 2 * nat_of_binary_be t.
 Proof. intros. depind t; simp binary_shiftl_full.
+  simpl.
   destruct a. rewrite IHt. simp pow_of_2. omega.
 
   assumption.
@@ -601,7 +594,7 @@ Qed.
 
 Lemma binary_shiftl_full_n_be_correct {n} (t : bits n) m :
   nat_of_binary_be (binary_shiftl_n_full t m) = pow_of_2 m * nat_of_binary_be t.
-Proof. intros. depind m; simp binary_shiftl_n_full. omega.
+Proof. intros. depind m; simp binary_shiftl_n_full; simpl. omega.
   rewrite binary_shiftl_full_be_correct, IHm. 
   rewrite mult_assoc. replace (2 * pow_of_2 m) with (pow_of_2 (S m)).
   reflexivity. simp pow_of_2 ; omega.
@@ -621,18 +614,18 @@ Proof.
   intros n m x. induction x ; intros;
   simp binary_mult_full_be. apply nat_of_binary_zero. 
 
-  destruct a. 
-  destruct_call_eq @binary_plus_be.
-  apply binary_plus_be_correct_full in H.
-  destruct o. destruct H.
+  destruct a. simpl.
+  destruct_call_eq @binary_plus_be plusshift.
+  apply binary_plus_be_correct_full in plusshift.
+  destruct o. destruct plusshift as [bound eq].
   rewrite IHx in *.
-  simpl @nat_of_binary_be. rewrite H0.
+  simpl @nat_of_binary_be. rewrite eq.
   autorewrite with binary in *.
   ring_simplify.
   omega.
 
   rewrite IHx in *.
-  simpl @nat_of_binary_be. rewrite H.
+  simpl @nat_of_binary_be. rewrite plusshift.
   autorewrite with binary in *.
   ring. 
 
@@ -683,7 +676,8 @@ Proof. reduce_goal. induction x ; simp binary_be_le; depelim y ; depelim z.
 
   simp binary_be_le in H.
   simp binary_be_le in H0. 
-  destruct a ; destruct a1 ; destruct a0 ; simpl in * ; try discriminate ; simp binary_be_le.
+  destruct a ; destruct a1 ; destruct a0 ; simpl in * ; try discriminate ; 
+    simp binary_be_le ; simpl ; eauto. 
 Qed.
 
 Lemma binary_be_le_correct {n} (x y : bits n) : if binary_be_le x y then nat_of_binary_be x <= nat_of_binary_be y
@@ -695,15 +689,13 @@ Proof. intros. induction n; depelim x ; depelim y ; simpl ; simp binary_be_le.
   specialize (IHn x y).
   case_eq (xorb a a0). intros.
   destruct a0; destruct a ; try simpl in H ; noconf H.
-  case_eq_rew (binary_be_le x y).
-  omega.
   pose (nat_of_binary_bound x) ; omega.
 
-  case_eq_rew (binary_be_le x y).
+  case_eq_rew (binary_be_le x y) bexy;
   pose (nat_of_binary_bound y) ; omega.
-  omega.
 
-  case_eq_rew (binary_be_le x y); destruct a0; destruct a; simpdep; omega.
+  intro.
+  case_eq_rew (binary_be_le x y) bexy; destruct a0; destruct a; simpdep; omega.
 Qed.
 
 Lemma binary_be_le_view {n} (x y : bits n) : binary_be_le x y = true <-> nat_of_binary_be x <= nat_of_binary_be y. 

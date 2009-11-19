@@ -1,4 +1,4 @@
-Require Import Program.Equations Program Omega.
+Require Import Equations.Equations Program Omega.
 Require Export Bvector.
 
 Delimit Scope vect_scope with vect.

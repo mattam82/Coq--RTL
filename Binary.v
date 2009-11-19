@@ -81,7 +81,7 @@ Proof. intros.
 Qed.
   
 Ltac depelim_term c := 
-  let H := fresh in remember c as H ; depelim H.
+  let H := fresh in remember c as H ; depelim H ; simplify_IH_hyps.
 
 Instance const_eq : EqDec (bits n) eq.
 Proof. 
@@ -90,7 +90,7 @@ intros n. red. intros. case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
   funind' (binary_eq x y). reflexivity.
   depelim_term (binary_eq v v0). 
   rewrite andb_true_iff in eqxy. destruct eqxy as [eqxy _].
-  apply bool_eq_ok in eqxy. subst. rewrite IHbinary_eq_ind. congruence.
+  apply bool_eq_ok in eqxy. subst. rewrite IHbinary_eq_ind; congruence.
   rewrite andb_true_iff in eqxy. intuition. 
 
   funind' (binary_eq x y).
@@ -148,7 +148,7 @@ Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
 Proof.
   intros. funind' (binary_eq x y). reflexivity.
   
-  depelim_term (binary_eq v v0). subst. 
+  depelim_term (binary_eq v v0). subst.
   rewrite andb_b_true in H.
   apply bool_eq_ok in H. subst. reflexivity.
 
@@ -300,10 +300,18 @@ Proof.
   induction n ; simpl ; intros ; auto. rewrite IHn. reflexivity.
 Qed.
 
+Ltac funelim c :=
+  match c with
+    appcontext C [ ?f ] => 
+      let x := constr:(fun_elim (f:=f)) in
+        (let prf := eval simpl in x in
+          dependent pattern c ; apply prf ; clear ; intros)
+  end.
+
 Lemma binary_inverse_vector_append {n m} (v : bits n) (w : bits m) :
   binary_inverse (vector_append v w) = vector_append (binary_inverse v) (binary_inverse w).
-Proof. intros. Opaque vector_append.
-  funind (vector_append v w) vw.
+Proof. intros. Opaque vector_append. 
+  funind (vector_append v w) vw. 
   rewrite IHvector_append_ind. reflexivity.
 Qed.
 

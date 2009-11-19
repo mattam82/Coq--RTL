@@ -22,8 +22,12 @@
 Set Implicit Arguments.
 Unset Strict Implicit.
 
+Require Import CSDL.Basics.
 Require Import Coq.Strings.Ascii.
 Require Import Coq.Lists.List.
+Require Import Coq.Arith.Compare_dec.
+Require Import Omega.
+Require Import Coq.Program.Program.
 
 Infix "+++" := app (at level 30).
 
@@ -62,13 +66,8 @@ Fixpoint div10 n : nat * nat :=
 
 Notation "( x & y )" := (existS _ x y) : core_scope.
 
-Require Import Coq.Arith.Compare_dec.
-Require Import Omega.
-Require Import CSDL.Basics.
-
 Check euclid.
 
-Require Import Coq.Program.Program.
 
 Open Local Scope char_scope.
 

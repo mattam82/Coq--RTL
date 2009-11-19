@@ -35,7 +35,6 @@ Existing Instance space_cell_size_pos.
 (*   const sp.(space_address) -> forall agg : nat, option (bits (agg * sp.(space_cell_size))). *)
 
 Definition aggregate := nat.
-About binary_of_nat_le.
 
 Open Local Scope nat_scope.
 
@@ -198,7 +197,7 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space_descr) 
         exact None.
 
       (* EQ *)
-      subst agg q. rewrite quotient_cancel. exact c.
+      red in e0. subst agg q. rewrite quotient_cancel. exact c.
       assumption.
 
       (* GT *)
@@ -207,7 +206,7 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space_descr) 
       exploit o. clear o. subst w'. unhave. red. 
       assert(q > 1). subst q. now apply quotient_gt_1.
       red in H0. rewrite l in H0. 
-      setoid_replace sp'.(space_cell_size) with (1 * sp'.(space_cell_size)) at 1; [| unfold ty; omega].
+      setoid_replace sp'.(space_cell_size) with (1 * sp'.(space_cell_size)) at 1; [| unfold ty; red; omega].
       now apply mult_lt_compat.
       
       subst w'. rewrite modulo_cancel. reflexivity. 

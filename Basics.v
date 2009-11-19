@@ -1,5 +1,7 @@
-Require Export Arith Program Equations Have Morphisms EquivDec.
+Require Export Arith Program Equations.Equations Have Morphisms EquivDec.
 Require Export Relation_Definitions.
+
+Global Generalizable All Variables.
 
 Class Injective {A B} (f : A -> B) :=
   injective : forall x y, f x = f y -> x = y.
@@ -77,8 +79,7 @@ Inductive comparison `{E : Equivalence A eqA} ordA `{O : StrictOrder A eqA ordA}
 Class CompareDec `(E : Equivalence A eqA) `(O : StrictOrder A eqA ordA) :=
   compare_dec : Π x y : A, comparison ordA x y.
 
-Instance lt_strict_order : ! StrictOrder nat eq lt.
-Proof. constructor ; firstorder. Qed.
+Instance lt_strict_order : ! StrictOrder nat eq lt. 
 
 Instance nat_compare_dec : ! CompareDec nat eq lt.
 Proof.
@@ -265,8 +266,8 @@ Proof.
     case_eq (ltb (S n * y) y).
     intros Hxy; apply leb_complete in Hxy. 
     replace (S (S n * y)) with (S y + n * y) in Hxy by ring.
-    elimtype False. assert(S y <= S y + n * y) by auto with arith. rewrite <- H0 in Hxy.
-    elim (le_Sn_n _ Hxy).
+    assert(S y <= S y + n * y) by auto with arith. 
+    now exfalso; omega.
 
     intros. apply leb_complete_conv in H0. 
     replace (S n * y - y) with (n * y). rewrite IHn. reflexivity.

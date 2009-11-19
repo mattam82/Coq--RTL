@@ -173,20 +173,20 @@ Proof.
 
   apply bits_succ_be_correct in H.
   depelim c ; depelim b. simpl.
-  destruct a; simpl; simpl in x.
-  simpl in *. destruct a0 ; simpl.
+  destruct a; destruct a0; simpl in *.
   assert ([: c] = S [: b]) by omega. zarith.
 
-  add_bounds.
+  add_bounds. exfalso; omega.
+  add_bounds. 
   assert ([: c] = 0)%nat by omega.
-  rewrite H in x. autorewrite with arith in x.
+  rewrite H0 in H. autorewrite with arith in H.
   assert([: b ] = pow_of_2 t - 1)%nat by omega.
-  rewrite <- (nat_of_binary_full t) in H0.
-  inject H0. 
-  rewrite <- (nat_of_binary_zero t) in H. inject H.
-  unfold full ; autorewrite with binary. intuition auto.
+  rewrite <- (nat_of_binary_full t) in H1.
+  inject H1. 
+  rewrite <- (nat_of_binary_zero t) in H0. inject H0.
+  unfold full ; autorewrite with binary. intuition auto. 
 
-  destruct a0; simpl; zarith.
+  rewrite H. zarith.
 Qed.
 
 (** Correctness proof for two's complement. Only overflowing case is if we're taking
@@ -314,14 +314,14 @@ Proof.
   destruct a ; destruct a0; destruct a1; destruct a2; simpl in *;
     autorewrite with zarith in * ; try absurd_arith.
 
-  ring_simplify in x1; ring_simplify in x.
+  ring_simplify in H; ring_simplify in comply.
 
-  assert(Z_of_nat [:t] = Z_of_nat [:x0] + Z_of_nat [:b0]) by omega.
-  unfold min_signed. rewrite H. right. zarith.
+  assert(Z_of_nat [:t] = Z_of_nat [:x] + Z_of_nat [:b0]) by omega.
+  unfold min_signed. rewrite H0. right. zarith.
 
-  right. ring_simplify in x1. 
-  assert(Z_of_nat [:t] = Z_of_nat [:x0] - Z_of_nat [:y]) by omega.
-  rewrite H. ring.
+  right. ring_simplify in H.
+  assert(Z_of_nat [:t] = Z_of_nat [:x] - Z_of_nat [:y]) by omega.
+  rewrite H0. ring.
 
   destruct b1. noconf H.
   apply signed_plus_be_correct in H. rewrite H, comply. omega.

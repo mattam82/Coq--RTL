@@ -1,4 +1,5 @@
 -R . CSDL
+COQFLAGS = "$(OPT) $(COQLIBS) $(OTHERFLAGS) $(COQ_XML)"
 Have.v
 Basics.v
 Vector.v

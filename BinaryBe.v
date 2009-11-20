@@ -200,7 +200,7 @@ Proof with auto. intros n t b Htb. generalize dependent t. induction n ; intros.
   noconf Htb.
 
   simpl in *. destruct n.
-  destruct t... simpdep. clear. induction t...
+  destruct t... simpdep. noconf Htb. induction t...
 
   case_eq_rew (binary_of_nat_be t (S n)) bSn.
   specialize (IHn _ _ bSn).
@@ -371,14 +371,6 @@ Proof. intros. omega. Qed.
 Definition nat_of_bool (b : bool) := if b then 1%nat else 0%nat.
 
 Definition type_of {A : Type} (a : A) := A.
-
-Ltac funelim c :=
-  match c with
-    | appcontext C [ ?f ] =>
-      let elim := constr:(fun_elim (f:=f)) in
-        pattern_call c ; apply elim ; clear ; simplify_dep_elim;
-          simplify_IH_hyps
-  end.
 
 Lemma binary_minus_carry_correct {n} (x y t : bits n) c : binary_minus_be_carry x y c = (t, false) -> 
   nat_of_binary_be t = nat_of_binary_be x - (nat_of_bool c + nat_of_binary_be y).
@@ -582,19 +574,15 @@ Proof.
   intros n m x y.
   funelim (binary_mult_be x y) ; auto.
 
-  simpl.
-  rewrite nat_of_binary_zero. reflexivity.
+  simpl. rewrite nat_of_binary_zero. reflexivity.
 
-  subst recres.
-  apply binary_shiftl_n_be_correct in x1.
+  apply binary_shiftl_n_be_correct in Heq.
   apply binary_plus_be_correct_full in x. 
-  rewrite x, x1, <- (reccall _ x0) ; auto. simpl.
+  rewrite x, Heq, <- (reccall _ Heq0) ; auto. simpl.
   ring.
 Qed.
   
-(*
-
-  case_eq_rew (binary_mult_be v y) multxy.
+(*  case_eq_rew (binary_mult_be v y) multxy.
   simp binary_mult_be in *.
   destruct o ; simp binary_mult_be in *. noconf x.
   rewrite <- x0. omega.
@@ -680,13 +668,12 @@ Proof.
   
   rewrite zx_be_correct. rewrite x. simpl. reflexivity.
 
-  subst recres.
-  apply binary_plus_be_correct_full in x.
+  apply binary_plus_be_correct_full in Heq.
   rewrite reccall in *. autorewrite with binary in *.
-  simpl. destruct o. destruct x.
+  simpl. destruct o. destruct Heq.
   rewrite H0. ring_simplify. omega.
 
-  rewrite x. ring_simplify. omega.
+  rewrite Heq. ring_simplify. omega.
 Qed.
 
 Hint Rewrite @binary_mult_full_be_correct : binary.
@@ -738,39 +725,41 @@ Qed.
 Instance: BoolTransitive (@binary_be_le n).
 Proof. reduce_goal. 
   revert H z H0. funelim (binary_be_le x y); auto.
-  destruct a ; noconf x. depelim z. 
+  destruct a ; noconf Heq. depelim z. 
   destruct a ; simp binary_be_le in *. noconf H0.
 
   depelim z.
-  destruct a; destruct a0; noconf x; destruct a1; simp binary_be_le in *.
+  destruct a; destruct a0; noconf Heq; destruct a1; simp binary_be_le in *.
 Qed.
 
 Lemma binary_be_le_correct {n} (x y : bits n) : if binary_be_le x y then nat_of_binary_be x <= nat_of_binary_be y
   else nat_of_binary_be y < nat_of_binary_be x.
 Proof. 
   intros. funelim (binary_be_le x y); auto.
-  destruct a0; destruct a; noconf x; simpl.
+  destruct a0; destruct a; noconf Heq; simpl.
   pose (nat_of_binary_bound v) ; omega.
   pose (nat_of_binary_bound v0) ; omega.
 
-  destruct a0; destruct a; noconf x. simpl. 
+  destruct a0; destruct a; noconf Heq. simpl. 
   destruct_call @binary_be_le; omega.
 Qed.
+
+Hint Extern 0 => omega : omega.
 
 Lemma binary_be_le_view {n} (x y : bits n) : binary_be_le x y = true <-> nat_of_binary_be x <= nat_of_binary_be y. 
 Proof. intros. funelim (binary_be_le x y); auto.
 
   simpl. firstorder.
-  destruct a0; destruct a; noconf x; simpl.
+  destruct a0; destruct a; noconf Heq; simpl.
   intuition idtac.
   pose (nat_of_binary_bound v) ; omega.
 
-  split ; auto.
-  pose (nat_of_binary_bound v0) ; intros. exfalso. omega.
+  pose (nat_of_binary_bound v0) ;
+    split ; auto with exfalso omega. 
 
-  destruct a0; destruct a; noconf x. simpl.
-  rewrite x0. split ; intros ; auto with arith. 
-  clear x0. omega.
+  destruct a0; destruct a; noconf Heq. simpl.
+  rewrite x. split ; intros ; auto with arith. 
+  clear x. omega.
 Qed.
 
 Lemma binary_be_le_view' {n} (x y : bits n) : binary_be_le x y = false <-> nat_of_binary_be y < nat_of_binary_be x. 
@@ -778,16 +767,16 @@ Proof. intros.
   funelim (binary_be_le x y); auto.
 
   simpl. firstorder.
-  destruct a0; destruct a; noconf x; simpl.
+  destruct a0; destruct a; noconf Heq; simpl.
   intuition idtac. discriminate.
   pose (nat_of_binary_bound v); exfalso; omega.
 
   intuition idtac.
   pose (nat_of_binary_bound v0) ; omega.
 
-  destruct a0; destruct a; noconf x. simpl.
-  rewrite x0. split ; intros ; auto with arith. 
-  clear x0. omega.
+  destruct a0; destruct a; noconf Heq. simpl.
+  rewrite x. split ; intros ; auto with arith. 
+  clear x. omega.
 Qed.
   
 Definition binary_be_lt {n} (x y : bits n) := 

@@ -54,7 +54,7 @@ Tactic Notation "funind" constr(c) ident(Hcall) "generalizing" ne_hyp_list(l) :=
            try simpc f ; try simpc f in Hcall)
   end.
 
-Hint Extern 4 => discriminates : core.
+Hint Extern 4 => discriminates : exfalso.
 
 Notation " 'convertible' x y " := (eq_refl : x = y) (at level 0, x at next level, y at next level).
 
@@ -395,6 +395,9 @@ Proof. reflexivity. Qed.
 
 Lemma Z_of_nat_0 : Z_of_nat 0 = 0.
 Proof. reflexivity. Qed.
+
+Hint Extern 10 => progress exfalso : zarith.
+Hint Extern 10 => omega : zarith.
 
 Lemma Z_of_nat_pos n : Z_of_nat n >= 0.
 Proof. auto with zarith. Qed.

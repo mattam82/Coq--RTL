@@ -300,14 +300,6 @@ Proof.
   induction n ; simpl ; intros ; auto. rewrite IHn. reflexivity.
 Qed.
 
-Ltac funelim c :=
-  match c with
-    appcontext C [ ?f ] => 
-      let x := constr:(fun_elim (f:=f)) in
-        (let prf := eval simpl in x in
-          dependent pattern c ; apply prf ; clear ; intros)
-  end.
-
 Lemma binary_inverse_vector_append {n m} (v : bits n) (w : bits m) :
   binary_inverse (vector_append v w) = vector_append (binary_inverse v) (binary_inverse w).
 Proof. intros. Opaque vector_append. 

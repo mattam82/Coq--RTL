@@ -485,7 +485,7 @@ Proof.
   remember (binary_of_pos_be n (Psucc p0)).
   apply (f_equal nat_of_binary_be) in Heqb. rewrite binary_of_pos_be_Psucc in Heqb.
   rewrite pf in Heqb. rewrite nat_of_binary_full in Heqb. 
-  zarith.
+  zarith. 
 
   apply bits_succ_be_correct in sucp0.
   split. f_equal. 
@@ -552,7 +552,7 @@ Lemma Psize_monotone : forall p q, (p <= q)%positive -> (Psize p <= Psize q)%nat
 Proof.
   assert (le0 : forall n, (0<=n)%nat) by (induction n; auto).
   assert (leS : forall n m, (n<=m -> S n <= S m)%nat) by (induction 1; auto).
-  induction p; destruct q; simpl; auto; intros; try discriminate.
+  induction p; destruct q; simpl; auto with exfalso; intros; try discriminate.
   apply leS. apply IHp. 
   intro.
   unfold Ple in H. simpl in H.
@@ -566,13 +566,13 @@ Qed.
 Hint Resolve Zgt_pos_0 : zarith.
 
 Lemma Zsize_monotone_pos : forall p q, p >= 0 -> p <= q -> (Zsize p <= Zsize q)%nat.
-Proof. intros. destruct p ; destruct q ; simpl ; auto with arith.
+Proof. intros. destruct p ; destruct q ; simpl ; auto with arith exfalso.
   destruct p ; simpl ; auto with arith.
   apply Psize_monotone. apply H0.
 Qed.
 
 Lemma Zsize_monotone_neg : forall p q, q <= 0 -> p <= q -> (Zsize q <= Zsize p)%nat.
-Proof. intros. destruct p ; destruct q ; simpl ; auto with arith.
+Proof. intros. destruct p ; destruct q ; simpl ; auto with arith exfalso.
   destruct p ; simpl ; auto with arith.
   apply Psize_monotone. unfold Zle in H0. simpl in H0. red. 
   intro. apply ZC1 in H1. rewrite H1 in H0. simpl in H0. elim H0 ; reflexivity.
@@ -718,7 +718,7 @@ Proof. intros. noconf H. Qed.
 (*   apply inj_le. *)
 
 Lemma Ple_1 : forall p, (p <= 1 -> p = 1)%positive.
-Proof. intros. destruct p ; simpl ; auto. Qed.
+Proof. intros. destruct p ; simpl ; zarith. Qed.
 
 (* Lemma Ple_Plt : forall x y, (Psucc x <= y -> x < y)%positive. *)
 (* Proof. intros.  *)

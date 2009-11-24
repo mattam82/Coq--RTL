@@ -100,8 +100,8 @@ Lemma f_JMequal3 {A B C} (f : Π x : A, B x -> C x) (x y : A) (b : B x) (b' : B 
 Proof. intros. subst. apply f_JMequal2. assumption. Qed.
 
 Lemma vector_append_nil {A n} {v : vector A n} : vector_append v [[]] ~= v.
-Proof. intros. funind (vector_append v [[]]) vvnil.
-  apply (f_JMequal3 (@Vcons A a)). omega.
+Proof. intros. funelim (vector_append v [[]]). reflexivity. 
+  apply (f_JMequal3 (@Vcons A a)). fold plus. omega.
   assumption.
 Qed.
 

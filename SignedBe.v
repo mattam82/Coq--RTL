@@ -204,7 +204,7 @@ Proof. unfold two_s_complement.
   depelim x ; depelim compl ; simpl in *.
   destruct a ; destruct a0 ; simpl in * ; try rewrite H0 ; zarith.
   destruct sinvx as [H H0]. noconf H ; noconf H0.
-  apply binary_inverse_is_constant in x. subst. now auto.
+  apply binary_inverse_is_constant in H. subst. now auto.
 Qed.
 
 Require Import ROmega.
@@ -244,13 +244,13 @@ Qed.
 Lemma signed_plus_be_correct n : forall (t t' : bits (S n)) tt', signed_plus_be t t' = (tt', false) ->
   Z_of_signed_be tt' = Z_of_signed_be t + Z_of_signed_be t'.
 Proof.
-  intros. funind' (signed_plus_be t t'). depelim tt'.
+  intros. funelim (signed_plus_be t t'). depelim tt'.
   destruct_call_eq @binary_plus_be plusvv0.
   rewrite add_bits_correct in H.
   destruct_call_eq @add_bits_spec addaa0o.
   noconf H.
   apply binary_plus_be_correct_Z in plusvv0.
-  destruct o; [destruct plusvv0|] ; destruct a ; destruct a0 ; noconf x ; simpl in * ; zarith.
+  destruct o; [destruct plusvv0|] ; destruct a ; destruct a0 ; noconf H ; simpl in * ; zarith.
 Qed.
 
 (** If there is an overflow, the sign depends on the sign of the result. *)
@@ -266,20 +266,20 @@ Hint Rewrite Z_of_sign_0 Z_of_sign_1 : zarith.
 Lemma signed_plus_be_overflow n : forall (t t' : bits (S n)) tt', signed_plus_be t t' = (tt', true) ->
   Z_of_signed_be tt' + Z_of_sign (negb (Vhead tt')) * pow_of_2_Z (S n) = Z_of_signed_be t + Z_of_signed_be t'.
 Proof.
-  intros. funind' (signed_plus_be t t').
+  intros. funelim (signed_plus_be t t').
   depelim tt'.
   destruct_call_eq @binary_plus_be plusvv0.
   rewrite add_bits_correct in H.
   apply binary_plus_be_correct_Z in plusvv0.
   destruct_call_eq @add_bits_spec aa0o.
   noconf H.
-  destruct o. destruct plusvv0. zarith. simpl. rewrite H0. 
+  destruct o. destruct plusvv0. zarith. simpl. rewrite H1. 
   Opaque pow_of_2_Z Zminus Zmult.
-  destruct a ; destruct a0 ; noconf x ; simpl ; zarith. 
+  destruct a ; destruct a0 ; noconf H ; simpl ; zarith. 
   Transparent Zminus Zmult.
   omega.
 
-  destruct a ; destruct a0 ; noconf x ; simpl in * ; rewrite plusvv0 ; zarith.
+  destruct a ; destruct a0 ; noconf H ; simpl in * ; rewrite plusvv0 ; zarith.
 Qed.
 
 (** Signed substraction [signed_plus_be] is just addition of the opposite. *)
@@ -866,7 +866,7 @@ Proof. intros. depelim b.
   case_eq_rew [: b] nb.
   Transparent Z_of_nat. simpl in nb. zarith.
   unfold pow_of_2_Z in zb. noconf zb.
-  rewrite <-x in e.
+  rewrite <- H in e.
   destruct n. simpl in *. noconf x.
   rewrite (Psize_Ppred_pow_of_2_positive n) in e. 
   absurd_arith.

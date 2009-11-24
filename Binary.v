@@ -55,47 +55,25 @@ Equations(nocomp) binary_eq {n} (x y : bits n) : bool :=
 binary_eq ?(0) Vnil Vnil := true ;
 binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
 
-Ltac funind' c :=
-  match c with
-    appcontext C [ ?f ] => 
-      let x := constr:(fun_ind_prf (f:=f)) in
-        (let prf := eval simpl in x in
-         let p := context C [ prf ] in
-         let prf := fresh in
-         let call := fresh in
-           assert(prf:=p) ;
-           (* Abstract the call *)
-           set(call:=c) in *; move prf at top ; revert_until prf;
-           (* Now do dependent elimination and simplifications *)
-           depind prf ; simplify_dep_elim ; simplify_IH_hyps)
-           (* Use the simplifiers for the constant to get a nicer goal. *)
-           (* try simpc f ; try on_last_hyp *)
-           (*   ltac:(fun id => rename id into Hcall)) *)
-        || fail 1 "Internal error in funind"
-  end || fail "Maybe you didn't declare the functional induction principle for" c.
-
 Lemma binary_eq_refl n (b : bits n) : binary_eq b b = true.
 Proof. intros.
-  funind' (binary_eq b b). reflexivity.
-  rewrite bool_eq_refl. simpl ; auto.
+  funelim (binary_eq b b). 
+    reflexivity. 
+    rewrite bool_eq_refl. simpl ; auto.
 Qed.
-  
-Ltac depelim_term c := 
-  let H := fresh in remember c as H ; depelim H ; simplify_IH_hyps.
 
 Instance const_eq : EqDec (bits n) eq.
 Proof. 
-intros n. red. intros. case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
+intros n. red. unfold Equivalence.equiv. intros. 
+case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
 
-  funind' (binary_eq x y). reflexivity.
-  depelim_term (binary_eq v v0). 
-  rewrite andb_true_iff in eqxy. destruct eqxy as [eqxy _].
-  apply bool_eq_ok in eqxy. subst. rewrite IHbinary_eq_ind; congruence.
-  rewrite andb_true_iff in eqxy. intuition. 
+  funelim (binary_eq x y); simpdep. 
+    reflexivity.
+    rewrite andb_true_iff in eqxy. destruct eqxy as [eqxy eqv0].
+    apply bool_eq_ok in eqxy. specialize (H eqv0). congruence.
 
-  funind' (binary_eq x y).
-  red in H0; noconf H0.
-  rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
+  funelim (binary_eq x y); simpdep. 
+  noconf H0. rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
 Qed.
 
 Equations(nocomp) binary_shiftl {n} (t : bits n) : bits n * overflow :=
@@ -146,21 +124,20 @@ Qed.
 
 Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
 Proof.
-  intros. funind' (binary_eq x y). reflexivity.
+  intros. funelim (binary_eq x y). reflexivity.
   
-  depelim_term (binary_eq v v0). subst.
-  rewrite andb_b_true in H.
-  apply bool_eq_ok in H. subst. reflexivity.
-
-  rewrite andb_b_false in H. discriminate.
+  rewrite andb_true_iff in H0. 
+  destruct H0 as [Haa0 Hvv0]. specialize (H Hvv0).
+  now (apply bool_eq_ok in Haa0; congruence).
 Qed.
 
 Require Import BoolEq.
 
 Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
 Proof.
-  intros. funind' (binary_eq x y). 
-  noconf H1. rewrite bool_eq_refl, binary_eq_refl in H. discriminate.
+  intros. funelim (binary_eq x y); simpdep.
+    noconf H1.
+    rewrite bool_eq_refl, binary_eq_refl in H0. discriminate.
 Qed.
 
 Transparent binary_eq.
@@ -302,9 +279,8 @@ Qed.
 
 Lemma binary_inverse_vector_append {n m} (v : bits n) (w : bits m) :
   binary_inverse (vector_append v w) = vector_append (binary_inverse v) (binary_inverse w).
-Proof. intros. Opaque vector_append. 
-  funind (vector_append v w) vw. 
-  rewrite IHvector_append_ind. reflexivity.
+Proof. intros. Opaque vector_append. funelim (vector_append v w); simp vector_append.
+  now rewrite H. 
 Qed.
 
 Hint Rewrite @binary_inverse_constant 

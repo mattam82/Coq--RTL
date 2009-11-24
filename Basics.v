@@ -6,7 +6,7 @@ Global Generalizable All Variables.
 Class Injective {A B} (f : A -> B) :=
   injective : forall x y, f x = f y -> x = y.
 
-Ltac inject H := apply injective in H ; subst.
+Ltac inject H := first [ apply injective in H | simpl in H; apply injective in H ] ; subst.
 
 Ltac case_eq_rew :=
   fun x H => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;

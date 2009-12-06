@@ -429,7 +429,7 @@ Lemma binary_of_pos_be_Psucc (p : positive) n (Hs : Have (Psize (Psucc p) <= n)%
 Proof. autorewrite with binary nat_of_P. reflexivity. Qed.
 
 Lemma binary_of_pos_be_binary_of_nat n (p : positive) (Hs : Have (Psize p <= n)%nat) : 
-  binary_of_nat_be (nat_of_P p) n = Some (binary_of_pos_be n p).
+  binary_of_nat_be n (nat_of_P p) = Some (binary_of_pos_be n p).
 Proof. Opaque binary_of_nat_be binary_of_pos_be.
   rewrite <- (nat_of_binary_of_pos_be n p).
   rewrite binary_of_nat_inverse. reflexivity.

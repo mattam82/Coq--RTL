@@ -232,16 +232,24 @@ Qed.
 
 (** * Partial injection from [nat] to unsigned. *)
 
-
-Equations(nocomp) binary_of_nat_be (c : nat) (t : nat) : option (bits t) :=
-binary_of_nat_be O t := Some zero ;
-binary_of_nat_be (S n) O := None ;
-binary_of_nat_be (S m) (S t) <= binary_of_nat_be m (S t) => {
+Equations(nocomp) binary_of_nat_be (t : nat) (c : nat) : option (bits t) :=
+binary_of_nat_be t O := Some zero ;
+binary_of_nat_be t (S m) <= binary_of_nat_be t m => {
   | None := None;
   | Some b <= bits_succ_be b => {
     | pair sb true := None;
     | pair sb false := Some sb }
 }.
+
+(* Equations(nocomp) binary_of_nat_be (c : nat) (t : nat) : option (bits t) := *)
+(* binary_of_nat_be O t := Some zero ; *)
+(* binary_of_nat_be (S n) O := None ; *)
+(* binary_of_nat_be (S m) (S t) <= binary_of_nat_be m (S t) => { *)
+(*   | None := None; *)
+(*   | Some b <= bits_succ_be b => { *)
+(*     | pair sb true := None; *)
+(*     | pair sb false := Some sb } *)
+(* }. *)
 
 Global Transparent bits_succ_be binary_of_nat_be.
 
@@ -251,10 +259,10 @@ Eval compute in (binary_of_nat_be 8 255).
 Ltac simpbin := simpdep; autorewrite with binary in *.
 Opaque binary_of_nat_be bits_succ_be.
 
-Lemma nat_of_binary_binary_of_nat_inverse n (t : nat) (b : bits t) : binary_of_nat_be n t = Some b ->
+Lemma nat_of_binary_binary_of_nat_inverse n (t : nat) (b : bits t) : binary_of_nat_be t n = Some b ->
   nat_of_binary_be b = n.
 Proof with simpbin; auto.
-  funelim (binary_of_nat_be n t).
+  funelim (binary_of_nat_be t n).
   
   now simpbin. 
 
@@ -461,21 +469,6 @@ Proof. funelim (nat_of_binary_be t). destruct a.
   simp pow_of_2 in H0. generalize (pow_of_2_pos n). absurd_arith.
   depelim v; try noconf H0. simplify_IH_hyps. rewrite (H H0). reflexivity.
 Qed.
-
-(* Lemma binary_of_nat_be_plus n m t : forall v, binary_of_nat_be (n + m) t = Some v -> *)
-(*   exists v' w', binary_of_nat_be n t = Some v' /\ binary_of_nat_be m t = Some w' /\ *)
-(*     (binary_plus_be v' w' = (v, false)). *)
-(* Proof. *)
-(*   intros. pose (nat_of_binary_binary_of_nat_inverse _ _ _ H). *)
-(*   pose binary_plus_be_correct_full. *)
-
-(*   funelim (binary_of_nat_be (n + m) t). *)
-
-(*   destruct n ; destruct m ; noconf H. *)
-(*   exists (@zero t) (@zero t). *)
-(*   simp binary_of_nat_be. repeat (split ; auto). induction t; simpl. compute. reflexivity. *)
-(*   unfold binary_plus_be. Opaque vfold_right2. unfold zero. simp vfold_right2. setoid_rewrite IHt. *)
-(*   reflexivity. *)
   
 Open Local Scope bin_scope.
 
@@ -498,16 +491,15 @@ Qed.
 
 Hint Resolve nat_of_binary_zero : binary.
 
-Lemma binary_of_nat_be_ok (c : nat) (t : nat) : c < pow_of_2 t -> 
-  exists b, binary_of_nat_be c t = Some b /\ [: b ] = c.
+Lemma binary_of_nat_be_ok (t : nat) (c : nat) : c < pow_of_2 t -> 
+  exists b, binary_of_nat_be t c = Some b /\ [: b ] = c.
 Proof.
   intros. funelim_call binary_of_nat_be. 
 
     exists (@zero t). split ; auto with binary.
-    depelim H. depelim H.
 
-    rewrite Heq in Hind.
-    destruct Hind. omega. destruct H0; discriminate.
+    destruct Hind. omega.
+    destruct H0. congruence.
 
     correctness Heq. 
     apply nat_of_binary_binary_of_nat_inverse in Heq0. subst.
@@ -518,7 +510,7 @@ Proof.
     subst. exists v0; split; auto.
 Qed.
 
-Lemma binary_of_nat_inverse {n} (t : bits n) : binary_of_nat_be [: t ] n = Some t.
+Lemma binary_of_nat_inverse {n} (t : bits n) : binary_of_nat_be n [: t ] = Some t.
 Proof.
   generalize (nat_of_binary_bound t). 
   intros. destruct (binary_of_nat_be_ok _ _ H) as (res & H' & H0).
@@ -538,32 +530,6 @@ binary_mult_be (S m) n (Vcons true m tlx) y <=
         | pair y'' false := binary_plus_be y' y''
       }
   }.
-
-(* Equations(nocomp) binary_mult_be {m n} (x : bits m) (y : bits n) : bits n * overflow := *)
-(* binary_mult_be ?(O) n Vnil y := (zero, false) ; *)
-(* binary_mult_be ?(S m) n (Vcons false m tlx) y := binary_mult_be tlx y ; *)
-(* binary_mult_be ?(S m) n (Vcons true m tlx) y <= binary_shiftl_n y m =>  *)
-(* { *)
-(*   binary_mult_be ?(S m) n (Vcons true m tlx) y (pair y' true) := (y, true) ; *)
-(*   binary_mult_be ?(S m) n (Vcons true m tlx) y (pair y' false) <= binary_mult_be tlx y =>  *)
-(*   { *)
-(*     binary_mult_be ?(S m) n (Vcons true m tlx) y (pair y' false) (pair y'' true) := (y, true) ; *)
-(*     binary_mult_be ?(S m) n (Vcons true m tlx) y (pair y' false) (pair y'' false) :=  *)
-(*       binary_plus_be y' y''  *)
-(*   } *)
-(* }. *)
-
-(* Equations(nocomp) binary_mult_be {n m} (x : bits m) (y : bits n) : bits n * overflow := *)
-(* binary_mult_be n O Vnil y := (zero, false) ; *)
-(* binary_mult_be n (S m) (Vcons hdx m tlx) y := *)
-(*   if hdx then  *)
-(*     let '(y', overflow) := binary_shiftl_n y m in *)
-(*       if overflow then (y, true) *)
-(*       else  *)
-(*         let '(y'', overflow) := binary_mult_be tlx y in *)
-(*           if overflow then (y, true) *)
-(*           else binary_plus_be y' y'' *)
-(*   else binary_mult_be tlx y. *)
 
 Opaque binary_shiftl.
 Transparent nat_of_binary_be. 
@@ -615,16 +581,6 @@ binary_mult_full_be (S n) m (Vcons true n tlx) y <=
   binary_plus_be (binary_shiftl_n_full y n) (binary_mult_full_be tlx y) => {
     | pair mult overflow := Vcons overflow mult }.
 
-(* Equations(nocomp) binary_mult_full_be {n m} (x : bits n) (y : bits m) : bits (n + m) := *)
-(* binary_mult_full_be O m Vnil y := zero ; *)
-(* binary_mult_full_be (S n) m (Vcons hdx n tlx) y := *)
-(*   if hdx then  *)
-(*     let y' := binary_shiftl_n_full y n in *)
-(*     let y'' := binary_mult_full_be tlx y in *)
-(*     let '(mult, overflow) := binary_plus_be y' y'' in *)
-(*       Vcons overflow mult *)
-(*   else zx_be (binary_mult_full_be tlx y). *)
-
 Opaque binary_shiftl_full.
 
 Lemma binary_shiftl_full_be_correct {n} (t : bits n) : 
@@ -666,7 +622,7 @@ Hint Rewrite @binary_mult_full_be_correct : binary.
 Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
   bin_size t := S n ;
   
-  bin_of_nat t := binary_of_nat_be t (S n);
+  bin_of_nat := binary_of_nat_be (S n);
   nat_of_bin := nat_of_binary_be;
 
   bin_succ := bits_succ_be ;
@@ -686,15 +642,6 @@ Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
 Global Transparent vfold_right2 binary_minus_be bits_succ_be nat_of_binary_be.
 
 (** * Orders *)
-
-(* Equations(nocomp) binary_be_le {n} (x y : vector bit n) : bool := *)
-(* binary_be_le (O) Vnil Vnil := true ; *)
-(* binary_be_le (S n) (Vcons a n x) (Vcons a' n y) := if xorb a a' then a' else binary_be_le x y. *)
-
-(* Print binary_be_le_ind. *)
-
-(* binary_be_le (S n) (Vcons a ?(n) x) (Vcons a' ?(n) y) true := a' ; *)
-(* binary_be_le (S n) (Vcons a ?(n) x) (Vcons a' ?(n) y) false := binary_be_le x y }. *)
 
 Equations(nocomp) binary_be_le {n} (x y : vector bit n) : bool :=
 binary_be_le ?(O) Vnil Vnil := true ;

@@ -93,7 +93,7 @@ Ltac discriminates := try match goal with [ H : ?x <> ?x |- _ ] => elim H ; refl
   Next Obligation. intuition. Qed.
   Next Obligation. intuition. Qed.
 
-Program Fixpoint print_nat (x : nat) { wf lt } : string :=
+Program Fixpoint print_nat (x : nat) { wf lt x } : string :=
   let '(q, r) := euclid x 10 in
     match q with 
       | 0 => [print_digit r]

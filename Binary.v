@@ -6,6 +6,7 @@ Inductive endianness := BigEndian | LittleEndian.
 
 Definition overflow := bool.
 Definition borrow := bool.
+Definition carry := overflow.
 
 Class Binary (en : endianness) (T : Type) := {
   bin_size : T -> nat ;
@@ -56,23 +57,20 @@ binary_eq ?(0) Vnil Vnil := true ;
 binary_eq ?(S n) (Vcons a n x) (Vcons b n y) := bool_eq a b && binary_eq x y.
 
 Lemma binary_eq_refl n (b : bits n) : binary_eq b b = true.
-Proof. intros.
-  funelim (binary_eq b b). 
-    reflexivity. 
+Proof. funelim (binary_eq b b). 
     rewrite bool_eq_refl. simpl ; auto.
 Qed.
 
-Instance const_eq : EqDec (bits n) eq.
-Proof. 
-intros n. red. unfold Equivalence.equiv. intros. 
-case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
+Instance const_eq n : EqDec (bits n) eq.
+Proof. red. unfold Equivalence.equiv. intros. 
+  case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
 
-  funelim (binary_eq x y); simpdep. 
-    reflexivity.
+  funelim (binary_eq x y).
+
     rewrite andb_true_iff in eqxy. destruct eqxy as [eqxy eqv0].
     apply bool_eq_ok in eqxy. specialize (H eqv0). congruence.
 
-  funelim (binary_eq x y); simpdep. 
+  funelim (binary_eq x y).
   noconf H0. rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
 Qed.
 
@@ -86,6 +84,10 @@ Equations(nocomp) binary_shiftl_full {n} (t : bits n) : bits (S n) :=
 binary_shiftl_full O Vnil := zero ;
 binary_shiftl_full (S n) (Vcons a n v) := 
   let v' := binary_shiftl_full v in (a |:| v').
+
+
+Ltac depelim id ::= try red in id; do_depelim ltac:(fun hyp => do_case hyp) id.
+Ltac do_depelim_nosimpl tac H ::= do_intros H ; try red in H; generalize_eqs H ; tac H.
 
 Equations(nocomp) binary_shiftl_n {n} (t : bits n) (m : nat) : bits n * overflow :=
 binary_shiftl_n n t O := (t, false) ;
@@ -105,26 +107,19 @@ Global Transparent binary_shiftl_full binary_shiftl_n_full.
 Definition add_bits_spec (x y c : bool) :=
   (xorb (xorb x y) c, (x && y) || (y && c) || (x && c)).
 
-Definition add_bits (x y c : bool) :=
-  if x then 
-    if y then (c, true)
-    else 
-      if c then (false, c)
-      else (x, c)
-  else
-    if y then 
-      if c then (false, c)
-      else (y, c)
-    else (c, false).
+Equations(nocomp) add_bits (x y c : bool) : bool * bool :=
+add_bits true true c := (c, true) ;
+add_bits true false true := (false, true);
+add_bits true false false := (true, false);
+add_bits false true true := (false, true) ;
+add_bits false true false := (true, false);
+add_bits false false c := (c, false).
 
 Lemma add_bits_correct x y c : add_bits x y c = add_bits_spec x y c.
-Proof.
-  destruct x ; destruct y ; destruct c ; compute ; try reflexivity.
-Qed.
+Proof. funelim (add_bits x y c); destruct c ; reflexivity. Qed.
 
 Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
-Proof.
-  intros. funelim (binary_eq x y). reflexivity.
+Proof. funelim (binary_eq x y). 
   
   rewrite andb_true_iff in H0. 
   destruct H0 as [Haa0 Hvv0]. specialize (H Hvv0).
@@ -134,16 +129,15 @@ Qed.
 Require Import BoolEq.
 
 Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
-Proof.
-  intros. funelim (binary_eq x y); simpdep.
-    noconf H1.
-    rewrite bool_eq_refl, binary_eq_refl in H0. discriminate.
+Proof. funelim (binary_eq x y).
+
+  noconf H1. rewrite bool_eq_refl, binary_eq_refl in H0. discriminate.
 Qed.
 
 Transparent binary_eq.
 
 Definition coerce_bits {n m} (c : bits n) (H : n = m) : bits m.
-Proof. intros ; subst. exact c. Defined.
+Proof. subst. exact c. Defined.
 
 (** Orders *)
 
@@ -168,76 +162,51 @@ Require Import BinPos.
 
 Open Local Scope positive_scope.
 
-Obligation Tactic := idtac.
+Equations(nocomp) binary_of_pos_le (n : nat) (p : positive) (Hs : Have (Psize p = n)) : bits n :=
+binary_of_pos_le O p Hs :=! Hs;
+binary_of_pos_le (S ?(O)) xH eq_refl := Vcons true Vnil;
+binary_of_pos_le (S n) (xO p) Hs := Vcons false (binary_of_pos_le n p _) ;
+binary_of_pos_le (S n) (xI p) Hs := Vcons true (binary_of_pos_le n p _).
 
-Program Fixpoint binary_of_pos_le (n : nat) : forall (p : positive) `{Hs : Have (Psize p = n)}, bits n :=
-  match n with
-    | 0%nat => λ p Hp, !
-    | S n => λ p Hp, 
-      match p with
-        | 1 => Vcons true Vnil
-        | p~0 => Vcons false (binary_of_pos_le n p _)
-        | p~1 => Vcons true (binary_of_pos_le n p _)
-      end
-  end.
-
-Lemma le_S_n_trans n m : (S n <= S m -> n <= m)%nat.
-Proof. intros. depind H. apply le_n.
-  destruct m. inversion H. apply le_S. apply IHle ; auto.
-Defined.
-Hint Resolve le_S_n_trans.
-
-Lemma eq_add_S_trans n m : S n = S m -> n = m.
-Proof. intros. congruence. Defined.
-Hint Resolve eq_add_S_trans.
-
-Obligation Tactic := program_simplify.
-
-  Next Obligation. unfold Have in *. intros. revert Hp. destruct p; simpl; absurd_arith. Qed.
-
-  Next Obligation. unfold Have in *. simpl in Hp. apply eq_add_S_trans in Hp. assumption. Defined.
-
-  Next Obligation. 
-    unfold Have in *. 
-    simpl in Hp. apply eq_add_S_trans in Hp. assumption.
-  Defined.
-
-  Next Obligation. 
-    unfold Have in *. 
-    simpl in Hp. apply eq_add_S_trans in Hp. assumption.
-  Defined.
+  Next Obligation. unhave; noconf Hs. Defined.
+  Next Obligation. unhave; noconf Hs. Defined.
+  Next Obligation. unhave. destruct p; noconf Hs. Defined.
+  Next Obligation. unhave; destruct p; noconf Hs. Defined.
 
 Implicit Arguments binary_of_pos_le [ [ Hs ] ].
-
-Program Fixpoint binary_of_pos_be (n : nat) : forall (p : positive) `{Hs : Have (Psize p <= n)%nat}, 
-  bits n :=
-  match n with
-    | 0%nat => λ p Hp, !
-    | S n => λ p Hp, 
-      match p with
-        | 1 => vector_append_one zero true
-        | p~0 => vector_append_one (binary_of_pos_be n p _) false
-        | p~1 => vector_append_one (binary_of_pos_be n p _) true
-      end
-  end.
-
-  Next Obligation. unfold Have in *. intros. revert Hp. destruct p; simpl; absurd_arith. Qed.
-
-  Next Obligation. unfold Have in *. simpl in Hp. apply le_S_n_trans. assumption. Defined.
-
-  Next Obligation. 
-    unfold Have in *. 
-    simpl in Hp. apply le_S_n_trans in Hp. assumption.
-  Defined.
-
-Implicit Arguments binary_of_pos_be [ [ Hs ] ].
 
 (** For [binary_of_pos] preconditions. *)
 
 Hint Extern 3 (Have (Psize _ = _)) => reflexivity : typeclass_instances.
 Hint Extern 3 (Have (Psize ?x <= ?y)%nat) => apply (@leb_complete (Psize x) y eq_refl) : typeclass_instances.
 
-Eval compute in (binary_of_pos_be 3 (5%positive)).
+Transparent binary_of_pos_le.
+Eval compute in (binary_of_pos_le 3 (5%positive)).
+
+Equations(nocomp) binary_of_pos_be (n : nat) (p : positive) {Hp : Have (Psize p <= n)%nat} : bits n :=
+binary_of_pos_be O p Hp :=! Hp;
+binary_of_pos_be (S n) xH Hp := vector_append_one zero true;
+binary_of_pos_be (S n) (xO p) Hp := vector_append_one (binary_of_pos_be n p (Hp:=_)) false ;
+binary_of_pos_be (S n) (xI p) Hp := vector_append_one (binary_of_pos_be n p (Hp:=_)) true.
+
+Lemma le_S_n_trans n m : (S n <= S m -> n <= m)%nat.
+Proof. intros. depind H. apply le_n.
+  destruct m. inversion H. apply le_S. apply IHle ; auto.
+Defined.
+
+Lemma eq_add_S_trans n m : S n = S m -> n = m.
+Proof. intros. congruence. Defined.
+
+  Next Obligation. unhave. intros. simpl in Hp. apply le_S_n_trans. assumption. Defined. 
+  Next Obligation. unhave. intros. simpl in Hp. apply le_S_n_trans. assumption. Defined. 
+  Next Obligation. unhave. intros.
+    revert Hp. destruct p; simpl; absurd_arith. Defined.
+
+  Next Obligation. unhave. intros.
+    revert Hp. destruct p; simpl; absurd_arith. Defined.
+
+Global Transparent binary_of_pos_be.
+
 Eval compute in (binary_of_pos_be 3 (6%positive)).
 Eval compute in (binary_of_pos_be 32 (6%positive)).
 Eval compute in (binary_of_pos_be 32 (255%positive)).
@@ -253,7 +222,6 @@ Program Definition max_int n : bits n :=
 
 Eval compute in (max_int 32).
 
-
 Definition binary_inverse {n} (b : bits n) := Bneg _ b.
 
 Lemma binary_inverse_involutive {n} (b : bits n) : binary_inverse (binary_inverse b) = b.
@@ -264,7 +232,7 @@ Qed.
 
 Lemma binary_inverse_is_constant {n} (b : bits n) c : binary_inverse b = constant_vector n c -> 
   b = constant_vector n (negb c).
-Proof. 
+Proof. revert c.
   induction b ; simpl ; intros ; auto.
   noconf H. rewrite negb_involutive. 
   rewrite (IHb (negb a)) at 1. 
@@ -279,7 +247,8 @@ Qed.
 
 Lemma binary_inverse_vector_append {n m} (v : bits n) (w : bits m) :
   binary_inverse (vector_append v w) = vector_append (binary_inverse v) (binary_inverse w).
-Proof. intros. Opaque vector_append. funelim (vector_append v w); simp vector_append.
+Proof. Opaque vector_append. 
+  funelim (vector_append v w); simp vector_append.
   now rewrite H. 
 Qed.
 

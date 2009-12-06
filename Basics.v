@@ -1,6 +1,8 @@
 Require Export Arith Program Equations.Equations Have Morphisms EquivDec.
 Require Export Relation_Definitions.
 
+Global Set Automatic Introduction.
+
 Global Generalizable All Variables.
 
 Class Injective {A B} (f : A -> B) :=
@@ -18,49 +20,13 @@ Ltac destruct_call_eq f id :=
     | H : ?T |- _ => on_application f ltac:(fun app => case_eq_rew app id) T
   end.
 
-Tactic Notation "funind" constr(c) ident(Hcall) :=
-  match c with
-    appcontext C [ ?f ] => 
-      let x := constr:(fun_ind_prf (f:=f)) in
-        (let prf := eval simpl in x in
-         let p := context C [ prf ] in
-         let prf := fresh in
-         let call := fresh in
-           assert(prf:=p) ;
-           (* Abstract the call *)
-           set(call:=c) in *; generalize (refl_equal : call = c); clearbody call ; intro Hcall ;
-           (* Now do dependent elimination and simplifications *)
-           dependent induction prf ; simplify_IH_hyps ;
-           (* Use the simplifiers for the constant to get a nicer goal. *)
-           try simpc f ; try on_last_hyp ltac:(fun id => simpc f in id ; noconf id))
-        || fail 1 "Internal error in funind"
-  end || fail "Maybe you didn't declare the functional induction principle for" c.
-
-Tactic Notation "funind" constr(c) ident(Hcall) "generalizing" ne_hyp_list(l) := 
-  match c with
-    appcontext C [ ?f ] => 
-      let x := constr:(fun_ind_prf (f:=f)) in
-        (let prf := eval simpl in x in
-         let p := context C [ prf ] in
-         let prf := fresh in
-         let call := fresh in
-           assert(prf:=p) ;
-           (* Abstract the call *)
-             set(call:=c) in *; generalize (refl_equal : call = c); intro Hcall ; revert Hcall ; clearbody call ; (* ; *)
-           (* (* Now do dependent elimination and simplifications *) *)
-           revert l ; do_depelim' ltac:(fun hyp => do_ind hyp) prf ; simplify_dep_elim ; 
-           intros ; simplify_IH_hyps ;
-           (* Use the simplifiers for the constant to get a nicer goal. *)
-           try simpc f ; try simpc f in Hcall)
-  end.
-
 Hint Extern 4 => discriminates : exfalso.
 
 Notation " 'convertible' x y " := (eq_refl : x = y) (at level 0, x at next level, y at next level).
 
 Ltac absurd_arith := intros ; elimtype False ; omega.
 
-Ltac simpdep := reverse ; simplify_dep_elim ; simplify_IH_hyps.
+Ltac simpdep := program_simpl; reverse; simpl; simplify_dep_elim ; simplify_IH_hyps.
 
 Lemma bool_eq_refl b : bool_eq b b = true.
 Proof. destruct b ; reflexivity. Qed.
@@ -76,7 +42,7 @@ Inductive comparison `{E : Equivalence A eqA} ordA `{O : StrictOrder A eqA ordA}
 | compare_EQ : eqA x y -> comparison ordA x y 
 | compare_GT : ordA y x -> comparison ordA x y.
 
-Class CompareDec `(E : Equivalence A eqA) `(O : StrictOrder A eqA ordA) :=
+Class CompareDec `(O : StrictOrder A eqA ordA) :=
   compare_dec : Π x y : A, comparison ordA x y.
 
 Instance lt_strict_order : ! StrictOrder nat eq lt. 
@@ -88,7 +54,6 @@ Proof.
   now apply compare_EQ.
   now apply compare_GT.
 Defined.
-
 
 Instance: Proper (le --> le ++> impl) lt.
 Proof. reduce_goal. unfold flip in *. omega. Qed.
@@ -112,26 +77,41 @@ Program Instance: Reflexive le.
 Program Instance: Transitive le := le_trans.
 Program Instance: PreOrder le.
 
-Lemma mult_lt_compat : Π n m p q : nat, n < m -> p <= q -> q > 0 -> n * p < m * q.
+Lemma mult_lt_compat (n m p q : nat) : n < m -> p <= q -> q > 0 -> n * p < m * q.
 Proof. intros. induction H. simpl. induction H0 ; try omega. 
   rewrite H0. ring_simplify. omega.
   ring_simplify. omega.
 Qed.
 
-Program Fixpoint euclid (n : nat) (m : nat) `{Have (m > 0)} {wf lt n} : nat * nat :=
-  match ltb n m with
-    | true => (0, n)
-    | false => let '(q, r) := euclid (n - m) m return nat * nat in
-      (S q, r)
-  end.
+Instance: WellFounded lt := lt_wf.
+
+Ltac rec ::= rec_wf_eqns.
+
+Equations euclid (n : nat) (m : nat) `{Have (m > 0)} : nat * nat :=
+euclid n m H => rec n =>
+euclid n m H <= dec (ltb n m) => {
+  | left _ := (0, n) ;
+  | right p <= euclid (n - m) m => {
+    | pair q r := (S q, r) }
+}.
 
   Next Obligation.
     unfold ltb in *.
-    symmetry in Heq_anonymous.
-    apply leb_complete_conv in Heq_anonymous. unfold Have in *. omega.
-  Qed.
+    apply leb_complete_conv in p. unfold Have in *. apply euclid. omega.
+  Defined.
 
-  Next Obligation. auto with *. Defined.
+  Next Obligation.
+    rec n rn.
+    unfold add_pattern.
+    simp euclid. constructor. depelim_term (dec (ltb x m)). simp euclid.
+    rewrite euclid_helper_1_equation_2.
+    constructor. apply leb_complete_conv in e. apply rn. unfold Have in *. omega.
+    depelim_term (euclid (x - m) m). autorewrite with euclid. constructor.
+  Defined.
+
+Transparent euclid.
+
+Eval compute in (euclid 8 4).
 
 Ltac ind_on f := 
   match goal with
@@ -140,62 +120,41 @@ Ltac ind_on f :=
         apply Fix_sub_rect ; fold f ; unfold MR in * ; simpl ; intros
   end.
 
+Ltac funelim f ::= funelim_tac f ltac:(fun f => simpl in *; simpdep).
+
+Opaque euclid.
+
 Lemma euclid_spec n m `{Have (m > 0)} : forall q r, euclid n m = (q, r) -> n = m * q + r /\ r < m.
-Proof.
-  intros n m H. unfold euclid. ind_on euclid_func. 
-  admit.
+Proof. funelim (euclid n m). clear Heq. apply leb_complete in e. split ; omega.
 
-  destruct x as [ n' [ m' Hm' ] ]; simpl in *.
-  case_eq (ltb n' m') ; intro Hlt ; rewrite Hlt in *. 
-  program_simpl. split ; try omega. apply leb_complete in Hlt. omega.
-  match type of H1 with
-    context [ euclid_func ?t ] => specialize (H0 t)
-  end.
-  simpl in H0.
-  destruct_call euclid_func.
-  program_simpl.
-  apply leb_complete_conv in Hlt.
-  assert(n' - m' < n') by (unfold Have in * ; omega).
-  specialize (H0 H1).
-  simplify_IH_hyps. replace (m' * S n0 + r) with (m' + (m' * n0 + r)) by ring.
-  destruct H0.
-  rewrite <- H0.
-  rewrite <- le_plus_minus. split. reflexivity. auto.
-  omega.
-Defined.
-
-Lemma euclid_unfold n m `{Have (m > 0)} : euclid n m = 
-  if ltb n m then (0, n) else let '(q, r) := euclid (n - m) m in (S q, r).
-Proof.
-  intros. unfold euclid. ind_on euclid_func. admit.
-  destruct x as [ n' [ m' Hm' ] ]; simpl in *.
-  destruct_call ltb. reflexivity.
-  reflexivity.
+  clear Heq0. 
+  specialize (Hind _ _ Heq). destruct Hind ; split ; auto.
+  replace (m * S n0 + r) with (m + (m * n0 + r)) by ring.
+  rewrite <- H0. apply leb_complete_conv in e. omega.
 Qed.
 
+Lemma euclid_unf n m `{Have (m > 0)} : euclid n m = 
+  if ltb n m then (0, n) else let '(q, r) := euclid (n - m) m in (S q, r).
+Proof. funelim (euclid n m). rewrite e. reflexivity.
+  rewrite e, Heq. reflexivity.
+Qed.
+Transparent euclid.
 Eval compute in (euclid 66 8).
 
 Definition quotient_nat n m `{Have (m > 0)} : nat := fst (euclid n m).
 Definition modulo_nat n m `{Have (m > 0)} : nat := snd (euclid n m).
 
-Lemma quotient_cancel : forall x y `{Have (y > 0)}, modulo_nat x y = 0 -> quotient_nat x y * y = x.
-Proof. intros x y H. unfold modulo_nat, quotient_nat in *. 
-  generalize (euclid_spec x y). destruct_call euclid ; intros Heucl ; simplify_IH_hyps.
-  destruct Heucl.
-  simpl in *. intros. subst. ring.
+Lemma quotient_cancel (x y : nat) `{Have (y > 0)} : modulo_nat x y = 0 -> quotient_nat x y * y = x.
+Proof. unfold modulo_nat, quotient_nat in *. 
+  generalize (euclid_spec x y). 
+  destruct_call euclid ; intros Heucl ; simpdep. 
+  destruct Heucl. subst. ring.
 Defined.
 
 Lemma euclid_0 y `{Have (y > 0)} : euclid 0 y = (0, 0).
-Proof. intros.
-  generalize (euclid_spec 0 y).
-  destruct_call euclid ; intros ; simplify_IH_hyps. destruct H0.
-  induction n. ring_simplify in H0. subst ; reflexivity.
-  unfold Have in *.
-  destruct y. inversion H.
-  ring_simplify in H0.
-  replace (y * n + y + n + n0 + 1) with (S (y * n + y + n + n0)) in H0 by ring.
-  discriminate.
-Qed.  
+Proof. funelim (euclid 0 y). 
+  clear Heq0. apply leb_complete_conv in e. unfold Have in *. exfalso; omega.
+Qed.
 
 Ltac destruct_equiv x y := let Heq := fresh "H" x y in
   destruct (equiv_dec x y) as [ Heq | Heq ] ; [ try (red in Heq ; subst x) | ].
@@ -241,11 +200,10 @@ Ltac exploit x :=
  || refine (modusponens _ _ (x _) _).
 
 Tactic Notation "omega" "*" := unfold Have in * ; omega.
-Ltac unhave := unfold Have in *.
 
 Lemma quotient_gt_1 x y `{Have (y > 0)} : x > y -> modulo_nat x y = 0 -> quotient_nat x y > 1.
-Proof. intros x y H. unfold modulo_nat, quotient_nat. generalize (euclid_spec x y).
-  destruct_call euclid ; program_simpl. simplify_IH_hyps. destruct H0. subst x. ring_simplify in H1.
+Proof. unfold modulo_nat, quotient_nat. generalize (euclid_spec x y).
+  destruct_call euclid ; simpdep. destruct H0. subst x. ring_simplify in H1.
   unhave. repeat (destruct n; try omega).
 Qed.
 Require Import SetoidTactics.
@@ -258,24 +216,21 @@ Proof. induction y.
 Qed.
 
 Lemma euclid_mult y `{Have (y > 0)} n : euclid (n * y) y = (n, 0).
-Proof.
+Proof. 
   induction n. 
     now rewrite euclid_0.
 
-    rewrite euclid_unfold.
-    case_eq (ltb (S n * y) y).
-    intros Hxy; apply leb_complete in Hxy. 
-    replace (S (S n * y)) with (S y + n * y) in Hxy by ring.
-    assert(S y <= S y + n * y) by auto with arith. 
-    now exfalso; omega.
-
-    intros. apply leb_complete_conv in H0. 
-    replace (S n * y - y) with (n * y). rewrite IHn. reflexivity.
-    simpl. rewrite plus_comm. rewrite plus_minus_le. reflexivity.
+    simp euclid. destruct_call dec. simp euclid. 
+    apply leb_complete in e. 
+    ring_simplify in e. set(foo:=y * n) in e; exfalso; omega.
+    
+    rewrite euclid_helper_1_equation_2.
+    replace (y + n * y - y) with (n * y). rewrite IHn. simp euclid.
+    auto with arith.
 Qed.
 
-Lemma modulo_cancel : forall n y `{Have (y > 0)}, modulo_nat (n * y) y = 0.
-Proof. intros n y H. unfold modulo_nat in *. rewrite euclid_mult. reflexivity. Qed.
+Lemma modulo_cancel n y `{Have (y > 0)} : modulo_nat (n * y) y = 0.
+Proof. unfold modulo_nat in *. rewrite euclid_mult. reflexivity. Qed.
 
 Require Import BinPos Pnat.
 
@@ -284,7 +239,7 @@ pow_of_2_positive O := 1%positive ;
 pow_of_2_positive (S n) := ((pow_of_2_positive n)~0)%positive.
 
 Lemma pow_of_2_positive_Sn n : pow_of_2_positive (S n) = Pmult (pow_of_2_positive n) 2.
-Proof. intros. simp pow_of_2_positive. rewrite Pmult_comm. simpl.
+Proof. simp pow_of_2_positive. rewrite Pmult_comm. simpl.
   reflexivity.
 Qed.
 
@@ -316,12 +271,12 @@ Open Local Scope Z_scope.
 Definition pow_of_2_Z (n : nat) := Zpos (pow_of_2_positive n).
 
 Lemma pow_of_2_nat_Z n : Z_of_nat (pow_of_2 n) = pow_of_2_Z n.
-Proof. intros. unfold pow_of_2_Z. unfold pow_of_2. rewrite Zpos_eq_Z_of_nat_o_nat_of_P. 
+Proof. unfold pow_of_2_Z, pow_of_2. rewrite Zpos_eq_Z_of_nat_o_nat_of_P. 
   reflexivity.
 Qed.
 
 Lemma pow_of_2_Z_pos n : pow_of_2_Z n > 0.
-Proof. intros. unfold pow_of_2_Z. intros. apply Zgt_pos_0. Qed.
+Proof. unfold pow_of_2_Z. intros. apply Zgt_pos_0. Qed.
 
 Lemma pow_of_2_positive_plus n m : 
   (pow_of_2_positive (n + m) = pow_of_2_positive n * pow_of_2_positive m)%positive.
@@ -343,6 +298,11 @@ Hint Rewrite nat_of_P_succ_morphism nat_of_P_plus_carry_morphism
   Pmult_nat_4_mult_2_permute nat_of_P_xH nat_of_P_xO nat_of_P_xI
   nat_of_P_o_P_of_succ_nat_eq_succ P_of_succ_nat_o_nat_of_P_eq_succ
   pred_o_P_of_succ_nat_o_nat_of_P_eq_id : nat_of_P.
+
+Hint Rewrite Psucc_o_double_minus_one_eq_xO
+  Pdouble_minus_one_o_succ_eq_xI
+  xO_succ_permute Ppred_succ : positive.
+Hint Rewrite <- Pplus_one_succ_r Pplus_one_succ_l : positive.
 
 Hint Rewrite pow_of_2_nat_positive : nat_of_P_inv.
 

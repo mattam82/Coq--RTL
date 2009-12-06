@@ -42,7 +42,7 @@ Definition in_space (sp : space_descr) (l : loc sp) (a : aggregate) :=
   match sp.(space_n) with
     | None => true
     | Some (existT n (exist nbin _)) => 
-      match binary_of_nat_be _ (a * sp.(space_cell_size)) with
+      match binary_of_nat_be (a * sp.(space_cell_size)) _ with
         | Some offset =>
           let '(l', b) := binary_plus_be l offset in
             if b then false

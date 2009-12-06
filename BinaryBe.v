@@ -1,5 +1,7 @@
 Require Import CSDL.Binary.
 
+Definition nat_of_bool (b : bool) := if b then 1%nat else 0%nat.
+
 (** * Semantics of an unsigned big-endian vector. *)
 
 Equations(nocomp) nat_of_binary_be {t : nat} (c : bits t) : nat :=
@@ -11,7 +13,7 @@ Global Transparent nat_of_binary_be.
 
 Notation " [:  x ] " := (nat_of_binary_be x).
 
-Lemma nat_of_binary_zero n : nat_of_binary_be (zero (n:=n)) = 0%nat.
+Lemma nat_of_binary_zero n : [: zero (n:=n) ] = 0%nat.
 Proof. induction n ; simpl ; auto. Qed.
 
 Definition one {n} : bits (S n) := vector_append_one (constant_vector n false) true.
@@ -48,22 +50,25 @@ Proof.
   generalize (nat_of_binary_bound t). generalize (pow_of_2_pos n). absurd_arith.
 Qed.
 
+Hint Resolve nat_of_binary_be_inj : binary.
+
+Hint Extern 4 => progress (autorewrite with binary) : binary.
+
 Instance: Injective (@nat_of_binary_be n) := nat_of_binary_be_inj.
 
 Lemma nat_of_binary_be_eq_rect m n v (H : m = n) : [: eq_rect m (λ h, bits h) v n H ] = [: v ].
-Proof. simplify_dep_elim. simpl. reflexivity. Qed.
+Proof. subst. simpl. reflexivity. Qed.
 Opaque vector_append.
 Lemma nat_of_binary_be_vector_append {n m} (v : bits n) (w : bits m) :
   ([: vector_append v w ] = pow_of_2 m * [: v ] + [: w ])%nat.
-Proof.
-  intros. funelim (vector_append v w).
+Proof. funelim (vector_append v w).
 
   now rewrite mult_comm.
 
   destruct a; simpl; rewrite H.
-  rewrite pow_of_2_plus. ring.
-
-  reflexivity.
+    rewrite pow_of_2_plus. ring.
+    
+    reflexivity.
 Qed.
 
 Hint Rewrite @nat_of_binary_be_vector_append nat_of_binary_be_eq_rect : binary.
@@ -101,118 +106,164 @@ Qed.
 
 Hint Rewrite @nat_of_binary_inverse : binary.
 
+Require Import BinPos.
+
+Lemma nat_of_binary_be_vector_append_one {n} (b : bits n) c :
+  [: vector_append_one b c ] = (2 * [: b ] + nat_of_bool c)%nat.
+Proof.
+  Opaque vector_append_one.
+  funelim (vector_append_one b c); simpl. 
+  destruct a0; simpl. rewrite H. ring_simplify. pose (nat_of_binary_bound v). 
+  simpl. simp pow_of_2. omega.
+  assumption.
+Qed.
+
+Hint Rewrite @nat_of_binary_be_vector_append_one : binary.
+
+Lemma nat_of_binary_of_pos_be n p {Hp: Have (Psize p <= n)} : 
+  [: binary_of_pos_be n p ] = nat_of_P p.
+Proof.
+  funelim (binary_of_pos_be n p);
+  autorewrite with binary.
+  rewrite H.
+  simpl. simp nat_of_P. omega.
+  rewrite H.
+  simpl. simp nat_of_P. omega.
+  simpl. reflexivity.
+Qed.
+
+Hint Rewrite @nat_of_binary_of_pos_be : binary.
+
 (** * Successor: adding 1. *)
 
-Equations(nocomp) bits_succ_be {t} (c : bits t) : bits t * overflow :=
+Equations(nocomp) bits_succ_be {t} (v : bits t) : bits t * overflow :=
 bits_succ_be O v := (v, true) ;
-bits_succ_be (S n) (Vcons true n v) := let (v', carry) := bits_succ_be v in
-  if carry then (Vcons false v', true) else (Vcons true v', false) ;
-bits_succ_be (S n) (Vcons false n v) := let (v', rest) := bits_succ_be v in
-  if rest then (Vcons true zero, false) 
-  else (Vcons false v', false).
 
-Lemma bits_succ_be_overflow (t : nat) (b : bits t) (c : bits t) : bits_succ_be b = (c, true) ->
+bits_succ_be (S n) (Vcons true n v) <= bits_succ_be v => {
+  | pair v' true := (Vcons false v', true) ;
+  | pair v' false := (Vcons true v', false) } ;
+
+bits_succ_be (S n) (Vcons false n v) <= bits_succ_be v => {
+  | pair v' true := (Vcons true zero, false) ;
+  | pair v' false := (Vcons false v', false) }.
+
+(* Equations(nocomp) bits_succ_be {t} (c : bits t) : bits t * overflow := *)
+(* bits_succ_be O v := (v, true) ; *)
+(* bits_succ_be (S n) (Vcons true n v) := let (v', carry) := bits_succ_be v in *)
+(*   if carry then (Vcons false v', true) else (Vcons true v', false) ; *)
+(* bits_succ_be (S n) (Vcons false n v) := let (v', rest) := bits_succ_be v in *)
+(*   if rest then (Vcons true zero, false)  *)
+(*   else (Vcons false v', false). *)
+
+About bits_succ_be_elim.
+
+Lemma bits_succ_be_overflow {t : nat} {b : bits t} {c : bits t} : bits_succ_be b = (c, true) ->
   c = zero /\ b = full.
-Proof with auto with *.
-  intros t b. funelim (bits_succ_be b); simpdep. 
+Proof with auto with *. 
+  funelim (bits_succ_be b). 
 
     now depelim c.
 
     destruct_call @bits_succ_be. 
     destruct o ; simpdep... intuition (repeat subst ; auto).
-
-    destruct_call @bits_succ_be ; destruct o...
 Qed.
 
+Class CorrectnessLemma (hyp : Type) := {
+  correctness_lemma_ty : forall P : Prop, Prop;
+  correctness_lemma_prf : hyp -> forall P : Prop, correctness_lemma_ty P -> P }.
+
+Ltac correctness H := 
+  match goal with
+    | H : ?T |- ?P => apply (correctness_lemma_prf (hyp:=T) H P); clear H; unfold correctness_lemma_ty in *; simpl;
+      try intros H; intros; subst
+  end.
+
+Instance bits_succ_be_overflow_corr t b c : CorrectnessLemma (@bits_succ_be t b = (c, true)) := {
+  correctness_lemma_ty P := (c = zero -> b = full -> P) }.
+Proof. intros. apply bits_succ_be_overflow in H. intuition. Defined.
+
 Lemma bits_succ_be_ne n (y : bits n) b' : bits_succ_be (binary_inverse y) = (b', true) -> y = zero.
-Proof. intros. apply bits_succ_be_overflow in H. unfold full in H. destruct H.
+Proof. intros. correctness H. unfold full in H0.
   apply (binary_inverse_is_constant _ _ H0).
 Qed.
 
-Lemma bits_succ_be_correct (t : nat) (b : bits t) (c : bits t) : bits_succ_be b = (c, false) -> 
+Lemma bits_succ_be_correct {t : nat} {b : bits t} {c : bits t} : bits_succ_be b = (c, false) -> 
   nat_of_binary_be c = S (nat_of_binary_be b).
 Proof with auto with *.
-  intros t b.
   Opaque bits_succ_be nat_of_binary_be.
-  funelim (bits_succ_be b); simpdep.
+  funelim (bits_succ_be b).
      
   destruct_call @bits_succ_be.
-  destruct o; noconf H0. 
+  destruct o; noconf Heq. 
   Transparent nat_of_binary_be. simpl.
-  rewrite H. ring.
+  rewrite Hind. ring.
+  reflexivity.
 
   case_eq_rew (bits_succ_be v) sv.
-  destruct o; noconf H0. 
-  apply bits_succ_be_overflow in sv. destruct sv ; subst.
+  destruct o; noconf Heq. correctness sv.
   clear. induction n. simpl. reflexivity.
-  simp pow_of_2. rewrite <- plus_assoc. setoid_rewrite IHn. simpl.
-  unfold full. ring.
+  simp pow_of_2. rewrite <- plus_assoc. setoid_rewrite IHn.
+  unfold full. ring. 
+  
+  simpl. auto.
 Qed.
+
+Instance bits_succ_be_correctI t b c : CorrectnessLemma (@bits_succ_be t b = (c, false)) := {
+  correctness_lemma_ty P := nat_of_binary_be c = S (nat_of_binary_be b) -> P }.
+Proof. auto using @bits_succ_be_correct. Defined.
+
+Lemma bits_succ_be_no_overflow_correct n (b : bits n) `{Have ([: b ] < pred (pow_of_2 n))} : 
+  [: fst (bits_succ_be b) ] = S [: b ].
+Proof.
+  intros. 
+  funelim (bits_succ_be b); try correctness Heq. inversion H.
+  rewrite nat_of_binary_full in H. unhave. 
+  simp pow_of_2 in H. absurd_arith.
+  
+  rewrite Heq. omega.
+
+  autorewrite with binary. 
+  generalize (pow_of_2_pos n). omega.
+  
+  rewrite Heq. omega.
+Qed.
+
+(* Hint Extern 5 (Have _) => unhave; omega : typeclass_instances. *)
 
 (** * Partial injection from [nat] to unsigned. *)
 
 
-(* Equations binary_of_nat_be (t : nat) (c : nat) : option (bits t) := *)
-(* binary_of_nat_be t O := Some zero ; *)
-(* binary_of_nat_be O (S O) := None ; *)
-(* binary_of_nat_be (S t) (S O) := Some (vector_append_one zero true) ; *)
-(* binary_of_nat_be (S t) (S m) := Some (vector_append_one zero true) ; *)
+Equations(nocomp) binary_of_nat_be (c : nat) (t : nat) : option (bits t) :=
+binary_of_nat_be O t := Some zero ;
+binary_of_nat_be (S n) O := None ;
+binary_of_nat_be (S m) (S t) <= binary_of_nat_be m (S t) => {
+  | None := None;
+  | Some b <= bits_succ_be b => {
+    | pair sb true := None;
+    | pair sb false := Some sb }
+}.
 
-
-Fixpoint binary_of_nat_be (t : nat) (c : nat) : option (bits t) :=
-  match c with
-    | 0 => Some zero
-    | 1 => match t with 
-             | 0 => None
-             | S n => Some (vector_append_one zero true)
-           end
-    | S m => 
-      match binary_of_nat_be t m with
-        | None => None
-        | Some m' => 
-          let (m', overflow) := bits_succ_be m' in
-            if overflow then None
-            else Some m'
-      end
-  end.
-
-Global Transparent bits_succ_be.
+Global Transparent bits_succ_be binary_of_nat_be.
 
 Eval compute in (binary_of_nat_be 8 1).
 Eval compute in (binary_of_nat_be 8 255).
 
-(* Coercion nat_of_binary_be : bits >-> nat. *)
+Ltac simpbin := simpdep; autorewrite with binary in *.
+Opaque binary_of_nat_be bits_succ_be.
 
-Lemma binary_of_nat_be_n_O n : binary_of_nat_be (S n) 0 = Some zero.
-Proof with auto with *.
-  induction n ; intros...
-Qed.
-
-Hint Rewrite binary_of_nat_be_n_O : binary.
-
-Transparent binary_of_nat_be. 
-
-Lemma nat_of_binary_binary_of_nat_inverse n (t : nat) (b : bits t) : binary_of_nat_be t n = Some b ->
+Lemma nat_of_binary_binary_of_nat_inverse n (t : nat) (b : bits t) : binary_of_nat_be n t = Some b ->
   nat_of_binary_be b = n.
-Proof with auto. intros n t b Htb. generalize dependent t. induction n ; intros...
+Proof with simpbin; auto.
+  funelim (binary_of_nat_be n t).
+  
+  now simpbin. 
 
-  induction t... simpl in Htb. noconf Htb. 
-  noconf Htb.
-
-  simpl in *. destruct n.
-  destruct t... simpdep. noconf Htb. induction t...
-
-  case_eq_rew (binary_of_nat_be t (S n)) bSn.
-  specialize (IHn _ _ bSn).
-
-  case_eq_rew (bits_succ_be b0) sb0.
-  destruct o ; noconf Htb.
-  apply bits_succ_be_correct in sb0. rewrite sb0. now rewrite IHn.
-
-  discriminate.
+  specialize (Hind _ Heq0).
+  rewrite <- Hind. apply bits_succ_be_correct in Heq. rewrite Heq. reflexivity.
 Qed.
 
 Hint Rewrite nat_of_binary_binary_of_nat_inverse using solve [ auto ] : binary.
+Ltac funelim_call f := on_call f funelim.
 
 (** * Zero extension *)
 
@@ -227,66 +278,38 @@ Lemma nat_of_zx_zero {m n} (c : bits m) : [: vector_append (@zero n) c ] = [:c].
 Proof. intros. unfold zero. induction n; simp vector_append. Qed.
 
 Lemma zx_be_correct {t t'} `{Have (t' >= t)} (c : bits t) : [: zx_be c ] = [:c].
-Proof. intros. unfold zx_be. rewrite nat_of_binary_be_eq_rect. rewrite nat_of_zx_zero. reflexivity. Qed.
+Proof. intros. unfold zx_be. simpbin. omega. Qed.
 
 Hint Rewrite @nat_of_zx_zero @zx_be_correct : binary.
 
 (** * Addition *)
 
+Equations(nocomp) binary_plus_be_aux {n} (b b' : bit) (r : bits n * overflow) : bits (S n) * overflow :=
+binary_plus_be_aux n b b' (pair rest carry) <= add_bits b b' carry => {
+  | pair bit carry := (Vcons bit rest, carry) }. 
+
 Definition binary_plus_be {n} (x y : bits n) : bits n * overflow :=
-  vfold_right2 (A:=fun n => (bits n * overflow)%type) (fun n b b' r => 
-    let '(rest, carry) := r in
-    let '(b, carry) := 
-      match b, b' with
-        | true, true => (carry, true) 
-        | false, false => (carry, false)
-        | true, false | false, true => (negb carry, carry)
-      end
-    in (Vcons b rest, carry))
-  (Vnil, false) x y.
+  vfold_right2 (A:=fun n => (bits n * overflow)%type) 
+    (@binary_plus_be_aux) (Vnil, false) x y.
 
 Instance: Have (pow_of_2 n > 0).
 Proof. reduce_goal. induction n ; simp pow_of_2 ; try omega. Qed.
 
 Opaque vfold_right2.
 
-Lemma binary_plus_be_correct_full n : forall (t t' : bits n) tt' o, binary_plus_be t t' = (tt', o) ->
+Lemma binary_plus_be_correct_full n (t t' : bits n) : forall tt' o, binary_plus_be t t' = (tt', o) ->
   let add' := nat_of_binary_be t + nat_of_binary_be t' in
     if o then add' >= pow_of_2 n /\
       nat_of_binary_be tt' = add' - pow_of_2 n
     else nat_of_binary_be tt' = add'.
-Proof.
-  intros. revert o H. induction t ; intros ; depelim t' ; try depelim tt'.
-
-  simpl in *.
-  subst add'; destruct o; intuition. 
-
-  unfold binary_plus_be in H.
-  simp vfold_right2 in H.
-  case_eq_rew (binary_plus_be t t') plustt'. specialize (IHt _ _ _ plustt').
-  unfold binary_plus_be in plustt'. unfold bit in * ; rewrite plustt' in H.
-  clear plustt'.
-  
-  simp pow_of_2.
-  destruct a; destruct a0; noconf H ; program_simpl.
-  assert (add' >= pow_of_2 (S n)) by (subst add'; simp pow_of_2; omega).
-  subst add'. split. simpl in H ; omega. destruct a1. program_simpl. rewrite H1.
-  omega. rewrite IHt. omega.
-
-  destruct o.
-  assert (add' >= pow_of_2 (S n)) by (subst add'; simp pow_of_2; omega).
-  split. simp pow_of_2 in H ; omega. destruct IHt. rewrite H1.
-  subst add'; simpl; omega.
-  subst add'; simpl; omega.
-
-  destruct o.
-  assert (add' >= pow_of_2 (S n)) by (subst add'; simp pow_of_2; omega).
-  split. simp pow_of_2 in H ; omega. destruct IHt. rewrite H1.
-  subst add'; simpl; omega.
-  subst add'; simpl; omega.
-
-  destruct a1. program_simpl. rewrite H0. subst add'. omega.
-  assumption.
+Proof. 
+  unfold binary_plus_be. funelim_call @vfold_right2.
+  destruct_call_eq @vfold_right2 vfoldvv0. simpdep.
+  funelim_call @binary_plus_be_aux.
+  rewrite H1 in H. noconf H.
+  Opaque binary_plus_be_aux add_bits vfold_right2. clear H1 vfoldvv0.
+  destruct o0; funelim_call add_bits; simp add_bits pow_of_2;
+    try rewrite H1; try split ; try omega.
 Qed.
 
 Lemma binary_plus_be_correct n : forall (t t' : bits n) tt', binary_plus_be t t' = (tt', false) ->
@@ -315,43 +338,43 @@ Open Local Scope bin_scope.
 Equations(nocomp) binary_minus_be_carry {n} (x y : bits n) (carry : bit) : bits n * overflow :=
 binary_minus_be_carry O Vnil Vnil c := (Vnil, c) ;
 
-binary_minus_be_carry (S n) (Vcons true n tlx) (Vcons true n tly) c := 
-  let '(min', carry) := binary_minus_be_carry tlx tly c in
-    (Vcons 0 min', carry) ;
+binary_minus_be_carry (S n) (Vcons true n tlx) (Vcons true n tly) c 
+  <= binary_minus_be_carry tlx tly c => { 
+    | pair min' carry := (Vcons 0 min', carry) } ;
 
-binary_minus_be_carry (S n) (Vcons false n tlx) (Vcons false n tly) c := 
-  let '(min', carry) := binary_minus_be_carry tlx tly c in
-    (Vcons 0 min', carry) ;
+binary_minus_be_carry (S n) (Vcons false n tlx) (Vcons false n tly) c 
+  <= binary_minus_be_carry tlx tly c => { 
+    | pair min' carry := (Vcons 0 min', carry) } ;
 
-binary_minus_be_carry (S n) (Vcons false n tlx) (Vcons true n tly) c := 
-  (* (b(n-1) * 2^n-1 + ... + b0) - (2^n + b'(n-1) 2^n-1 + ... + b'0 + c) =
-     ((2^n - 1) - (b(n-1) * 2^n-1 + ... + b0)) + 1 - c + b'(n-1) 2^n-1 + ... + b'0) *)
-  let min' := binary_inverse tlx in
-    if c then
-      let '(plus', overflow) := binary_plus_be min' tly in
-        ((overflow |:| plus'), 1)
-    else
-      let '(plus, overflow) := bits_succ_be min' in
-      if overflow then (* tlx must have been 0 *)
-        (1 |:| tly, 1)
-      else
-        let '(plus', overflow') := binary_plus_be plus tly in
-          ((overflow' |:| plus'), 1) ;
 
-binary_minus_be_carry (S n) (Vcons true n tlx) (Vcons false n tly) c := 
-  (* (2^n + b(n-1) * 2^n-1 + ... + b0) - (b'(n-1) 2^n-1 + ... + b'0 + c) =
-     (2^n - 1) - (b'(n-1) 2^(n-1) + ... + b'0) + 1 - c + (bn * 2^(n-1) + ... + b0) *)
-  let rest := binary_inverse tly in
-  if c then
-    let '(plus', overflow') := binary_plus_be rest tlx in
-      (overflow' |:| plus', 0)
-  else
-    let '(plus, overflow) := bits_succ_be rest in
-    if overflow then (* tly was all zeros *)
-      (1 |:| tlx, 0)
-    else
-      let '(plus', overflow') := binary_plus_be plus tlx in
-        (overflow' |:| plus', 0).
+(* (b(n-1) * 2^n-1 + ... + b0) - (2^n + b'(n-1) 2^n-1 + ... + b'0 + c) =
+   ((2^n - 1) - (b(n-1) * 2^n-1 + ... + b0)) + 1 - c + b'(n-1) 2^n-1 + ... + b'0) *)
+binary_minus_be_carry (S n) (Vcons false n tlx) (Vcons true n tly) true
+  <= binary_plus_be (binary_inverse tlx) tly => {
+    | pair plus overflow := ((overflow |:| plus), 1) } ;
+
+binary_minus_be_carry (S n) (Vcons false n tlx) (Vcons true n tly) false
+  <= bits_succ_be (binary_inverse tlx) => {
+    | pair plus true := (* [tlx] must have been 0 *) (1 |:| tly, 1);
+    | pair plus false <= binary_plus_be plus tly => {
+      | pair plus' overflow := (overflow |:| plus', 1)
+    }
+  } ;
+
+(* (2^n + b(n-1) * 2^n-1 + ... + b0) - (b'(n-1) 2^n-1 + ... + b'0 + c) =
+   (2^n - 1) - (b'(n-1) 2^(n-1) + ... + b'0) + 1 - c + (bn * 2^(n-1) + ... + b0) *)
+
+binary_minus_be_carry (S n) (Vcons true n tlx) (Vcons false n tly) true
+  <= binary_plus_be (binary_inverse tly) tlx => {
+    | pair plus overflow := ((overflow |:| plus), 0) } ;
+
+binary_minus_be_carry (S n) (Vcons true n tlx) (Vcons false n tly) false
+  <= bits_succ_be (binary_inverse tly) => {
+    | pair plus true := (* [tly] must have been 0 *) (1 |:| tlx, 0);
+    | pair plus false <= binary_plus_be plus tlx => {
+      | pair plus' overflow := (overflow |:| plus', 0)
+    }
+  }.
 
 Global Transparent binary_minus_be_carry binary_plus_be bits_succ_be constant_vector vfold_right2 vector_append_one.
 
@@ -369,131 +392,137 @@ Proof. intros. omega. Qed.
 Lemma minus_plus_lt2 x y z : x > y -> ((x + z) - y) - x = z - y.
 Proof. intros. omega. Qed.
 
-Definition nat_of_bool (b : bool) := if b then 1%nat else 0%nat.
-
-Definition type_of {A : Type} (a : A) := A.
+Require Import ROmega.
 
 Lemma binary_minus_carry_correct {n} (x y t : bits n) c : binary_minus_be_carry x y c = (t, false) -> 
-  nat_of_binary_be t = nat_of_binary_be x - (nat_of_bool c + nat_of_binary_be y).
+  [: t ] = [: x ] - (nat_of_bool c + [: y ]).
 Proof.
-  intros. revert t H. funelim (binary_minus_be_carry x y c); simpdep.
+  intros. revert t H. funelim (binary_minus_be_carry x y c).
+
+  rewrite (Hind _ Heq).
+  omega.
+
+  apply binary_plus_be_correct_full in Heq.
+  rewrite ! nat_of_binary_inverse in Heq.
+  generalize (nat_of_binary_bound v0). generalize (nat_of_binary_bound v). intros.
+  destruct b; [destruct Heq as [bound Heq]|]; rewrite Heq; clear Heq;
+  ring_simplify; try abstract omega.
   
-  simpl. reflexivity.
+  apply bits_succ_be_overflow in Heq.
+  destruct Heq. subst. apply binary_inverse_is_constant in H0. rewrite H0.
+  simpbin. omega.
 
-  simpl.
-  case_eq_rew (binary_minus_be_carry v v0 carry) minusxy.
-  noconf H0.
-  destruct carry; simpl; try rewrite H ; simpl;
-    ring_simplify; omega.
+  apply binary_plus_be_correct_full in Heq.
+  apply bits_succ_be_correct in Heq0. rewrite Heq0 in *; clear Heq0.
+  rewrite ! nat_of_binary_inverse in Heq.
+  generalize (nat_of_binary_bound v0). generalize (nat_of_binary_bound v). intros.
+  destruct b ; [destruct Heq as [bound Heq]|]; rewrite Heq in *; clear Heq;
+  ring_simplify; generalize (pow_of_2_pos n); intros; try abstract omega.
 
-  destruct carry ; try noconf H. simpl.
-  case_eq_rew (binary_plus_be (binary_inverse v0) v) plusv0v.
-  noconf H. apply binary_plus_be_correct_full in plusv0v.
-  rewrite ! nat_of_binary_inverse in plusv0v. simpl.
-  destruct o. destruct plusv0v as [bound eq]. rewrite eq.
-  ring_simplify. generalize (nat_of_binary_bound v0). generalize (nat_of_binary_bound v).
-  intros. clear eq. abstract omega.
-  ring_simplify. generalize (nat_of_binary_bound v0). generalize (nat_of_binary_bound v).
-  intros. omega.
-
-  case_eq_rew (bits_succ_be (binary_inverse v0)) sv0.
-  destruct o. apply bits_succ_be_ne in sv0. subst v0. rewrite nat_of_binary_zero.
-  noconf H. simpl. omega.
-  
-  case_eq_rew (binary_plus_be b v) bv; noconf H. 
-  apply binary_plus_be_correct_full in bv. 
-  apply bits_succ_be_correct in sv0.
-  simpl. rewrite sv0 in bv. rewrite ! nat_of_binary_inverse in bv.
-  pose (nat_of_binary_bound v). 
-  pose (nat_of_binary_bound v0).
-  destruct o; [destruct bv as [bound bv]|]; simpl; try rewrite bv;
-  replace (S (pow_of_2 n - S (nat_of_binary_be v0))) with (pow_of_2 n - nat_of_binary_be v0) by omega.
-  rewrite minus_plus_lt by omega.
-  rewrite minus_plus_lt2 by omega.
-  omega. omega.
-
-  destruct carry.
-  destruct_call_eq @binary_plus_be invxy; noconf H.  
-  destruct_call_eq @bits_succ_be sinvx. destruct o ; try noconf H.
-  destruct_call_eq @binary_plus_be by; noconf H.
-  
-  case_eq_rew (binary_minus_be_carry v v0 carry) minusxy.
-  noconf H0.
+  auto.
 Qed.
 
 Lemma binary_minus_correct {n} (x y t : bits n) : binary_minus_be x y = (t, false) -> 
-  nat_of_binary_be x - nat_of_binary_be y = nat_of_binary_be t.
+  [: x ] - [: y ] = [: t ].
 Proof. intros. pose (binary_minus_carry_correct _ _ _ _ H). auto. Qed.
+
+Lemma binary_minus_be_zero n (t : bits n) : binary_minus_be t zero = (t, 0).
+Proof. unfold binary_minus_be. Opaque binary_minus_be_carry bits_succ_be zero.
+  funelim_call @binary_minus_be_carry. Transparent zero. unfold zero in *. 
+  simpdep.
+  apply binary_plus_be_correct_full in Heq.
+  apply bits_succ_be_correct in Heq0. rewrite !nat_of_binary_inverse in Heq0.
+  rewrite Heq0 in *; clear Heq0. rewrite nat_of_binary_zero in Heq.
+  destruct b; [destruct Heq as [bound Heq]|]. ring_simplify in Heq. 
+  assert([: v2] = [: v]). rewrite Heq. generalize (nat_of_binary_bound v). omega.
+  inject H. reflexivity.
+  generalize (nat_of_binary_bound v2); intros; exfalso; omega.
+  unfold zero in *. simpdep. 
+  rewrite Heq in Hind. noconf Hind.
+Qed.
 
 Lemma binary_minus_be_one_overflow n (t : bits (S n)) b : binary_minus_be t one = (b, 1) -> t = zero.
 Proof. unfold binary_minus_be. Opaque binary_minus_be_carry bits_succ_be.
-  induction n ; simpl ; auto. intros.
-  intros. do 2 depelim t. do 2 depelim b. unfold one in H. simpl in H.
-  destruct a; simp binary_minus_be_carry in H; noconf H.
-    
-  intros.
-  depelim t ; depelim b.
-  unfold one in H. simpl in H.
-  destruct a ; simp binary_minus_be_carry in *.
+  revert b.
+  funelim_call @binary_minus_be_carry; try
+    (assert(v0 = zero) by (induction n; noconf H);
+      subst v0; destruct n; noconf H; depelim v ; reflexivity).
 
-  destruct_call @bits_succ_be. destruct o. discriminate.
-  destruct_call @binary_plus_be. discriminate.
-  case_eq_rew (binary_minus_be_carry t (vector_append_one (constant_vector n 0) 1) 0)
-    minust. noconf H. 
-  apply IHn in minust. subst. reflexivity.
+  assert(v0 = zero) by (induction n; noconf H);
+    subst v0; setoid_rewrite (binary_minus_be_zero n v) in Heq; noconf Heq.
+
+  destruct n; noconf H; simpdep. rewrite (Hind _ Heq).
+  reflexivity.
 Qed.
 
-Lemma nat_of_binary_one_is_one n (t : bits (S n)) : nat_of_binary_be t = 1%nat -> t = one.
-Proof. induction n ; simpl ; intros ; auto. do 2 depelim t. destruct a ; simpl in * ; auto with *.
-  depelim t. destruct a. simp pow_of_2 in H.
-  generalize (pow_of_2_pos n) ; intros ; elimtype False ; omega.
-  simpl in H. apply IHn in H. rewrite H. reflexivity.
+Lemma nat_of_binary_one_is_one n (t : bits (S n)) : [: t ] = 1%nat -> t = one.
+Proof. funelim (nat_of_binary_be t). destruct a. 
+  depelim n; try noconf H0. rewrite <- (nat_of_binary_zero 0) in H0. inject H0. reflexivity.
+  simp pow_of_2 in H0. generalize (pow_of_2_pos n). absurd_arith.
+  depelim v; try noconf H0. simplify_IH_hyps. rewrite (H H0). reflexivity.
 Qed.
+
+(* Lemma binary_of_nat_be_plus n m t : forall v, binary_of_nat_be (n + m) t = Some v -> *)
+(*   exists v' w', binary_of_nat_be n t = Some v' /\ binary_of_nat_be m t = Some w' /\ *)
+(*     (binary_plus_be v' w' = (v, false)). *)
+(* Proof. *)
+(*   intros. pose (nat_of_binary_binary_of_nat_inverse _ _ _ H). *)
+(*   pose binary_plus_be_correct_full. *)
+
+(*   funelim (binary_of_nat_be (n + m) t). *)
+
+(*   destruct n ; destruct m ; noconf H. *)
+(*   exists (@zero t) (@zero t). *)
+(*   simp binary_of_nat_be. repeat (split ; auto). induction t; simpl. compute. reflexivity. *)
+(*   unfold binary_plus_be. Opaque vfold_right2. unfold zero. simp vfold_right2. setoid_rewrite IHt. *)
+(*   reflexivity. *)
   
 Open Local Scope bin_scope.
-Lemma binary_of_nat_inverse {n} (t : bits n) : binary_of_nat_be n (nat_of_binary_be t) = Some t.
+
+Lemma nat_of_binary_be_zero n (t : bits n) : [: t ] = 0%nat -> t = zero.
+Proof. funelim [: t]. destruct a. generalize (pow_of_2_pos n); absurd_arith.
+  rewrite <- (nat_of_binary_zero n) in H0. inject H0. reflexivity.
+Qed.
+
+Lemma bits_succ_be_zero n : bits_succ_be (@zero (S n)) = (one, 0).
+Proof. 
+  funelim (bits_succ_be (@zero (S n))).
+  destruct n. simp bits_succ_be in Heq. 
+  apply bits_succ_be_overflow in Heq. destruct Heq ; subst.
+  simplify_IH_hyps. noconf H0.
+  destruct n. simp bits_succ_be in Heq. noconf Heq.
+  simplify_IH_hyps. apply bits_succ_be_correct in Hind. apply bits_succ_be_correct in Heq. 
+  f_equal. apply nat_of_binary_be_inj. simpl. rewrite Heq.
+  simpl. setoid_rewrite <- Hind. reflexivity.
+Qed.
+
+Hint Resolve nat_of_binary_zero : binary.
+
+Lemma binary_of_nat_be_ok (c : nat) (t : nat) : c < pow_of_2 t -> 
+  exists b, binary_of_nat_be c t = Some b /\ [: b ] = c.
 Proof.
-  intros n t. remember (nat_of_binary_be t) as tmp. revert n t Heqtmp. induction tmp ; intros. simpl.
-  destruct n. now depelim t.
+  intros. funelim_call binary_of_nat_be. 
 
-  unfold zero in *. revert Heqtmp.
-  funelim (nat_of_binary_be t). subst rest; intros.
-  destruct a. generalize (pow_of_2_pos n). absurd_arith.
-  rewrite <- (nat_of_binary_zero n) in Heqtmp. inject Heqtmp. reflexivity.
+    exists (@zero t). split ; auto with binary.
+    depelim H. depelim H.
 
-  depelim t. noconf Heqtmp.
-  case_eq (binary_minus_be (a |:| t) one).
-  intros.
-  destruct b0.
-  apply binary_minus_be_one_overflow in H. rewrite H. rewrite H in Heqtmp.
-  rewrite nat_of_binary_zero in Heqtmp. discriminate.
+    rewrite Heq in Hind.
+    destruct Hind. omega. destruct H0; discriminate.
 
-  apply binary_minus_correct in H. rewrite nat_of_binary_one in H.
-  rewrite <- Heqtmp in H.
-  simpl in H. rewrite <- minus_n_O in H. subst.
-  simplify_IH_hyps.
-  simpl.
-  case_eq (nat_of_binary_be b) ; intros. rewrite H in *.
-  rewrite <- (nat_of_binary_one n) in Heqtmp.
-  apply nat_of_binary_be_inj in Heqtmp. 
-  rewrite <- Heqtmp. reflexivity.
-  
-  rewrite H in IHtmp.
-  rewrite IHtmp.
-  case_eq (bits_succ_be b).
-  intros.
-  destruct o.
-  destruct (bits_succ_be_overflow _ _ _ H0). 
-  subst.
-  rewrite nat_of_binary_full in Heqtmp.
-  replace (S (pow_of_2 (S n) - 1)) with (pow_of_2 (S n)) in Heqtmp. 
-  pose (nat_of_binary_bound (a |:| t)). rewrite <- Heqtmp in l.
-  elimtype False ; omega.
-  
-  generalize (pow_of_2_pos (S n)) ; intros ; omega.
+    correctness Heq. 
+    apply nat_of_binary_binary_of_nat_inverse in Heq0. subst.
+    autorewrite with binary in H. absurd_arith.
 
-  apply bits_succ_be_correct in H0.
-  rewrite Heqtmp in H0. apply nat_of_binary_be_inj in H0. congruence.
+    apply bits_succ_be_correct in Heq. 
+    apply nat_of_binary_binary_of_nat_inverse in Heq0.
+    subst. exists v0; split; auto.
+Qed.
+
+Lemma binary_of_nat_inverse {n} (t : bits n) : binary_of_nat_be [: t ] n = Some t.
+Proof.
+  generalize (nat_of_binary_bound t). 
+  intros. destruct (binary_of_nat_be_ok _ _ H) as (res & H' & H0).
+  rewrite H'. inject H0. reflexivity.
 Qed.
 
 Hint Rewrite @binary_of_nat_inverse : binary.
@@ -540,18 +569,18 @@ Opaque binary_shiftl.
 Transparent nat_of_binary_be. 
 
 Lemma binary_shiftl_be_correct {o} {n} (t : bits n) t' : binary_shiftl t = (t', o) ->
-  if o then pow_of_2 n + nat_of_binary_be t' = 2 * nat_of_binary_be t
-  else nat_of_binary_be t' = 2 * nat_of_binary_be t.
-Proof. intros. funelim (binary_shiftl t); simpdep. reflexivity.
-  case_eq_rew (binary_shiftl v) shiftv. noconf H0.
+  if o then pow_of_2 n + [: t' ] = 2 * [: t ]
+  else [: t' ] = 2 * [: t ].
+Proof. intros. funelim (binary_shiftl t).
+  case_eq_rew (binary_shiftl v) shiftv; simplify_IH_hyps. noconf H0.
   simpl. destruct o; destruct o0 ; simp pow_of_2 ; try omega.
 Qed.
 
 Transparent binary_shiftl.
 
 Lemma binary_shiftl_n_be_correct {n} (t : bits n) m t' : binary_shiftl_n t m = (t', false) ->
-  nat_of_binary_be t' = pow_of_2 m * nat_of_binary_be t.
-Proof. intros. funelim (binary_shiftl_n t m); simpdep. simpl. omega.
+  [: t' ] = pow_of_2 m * [: t ].
+Proof. intros. funelim (binary_shiftl_n t m).
   rewrite (H _ H0). apply binary_shiftl_be_correct in Heq. simpl in *.
   rewrite Heq. simp pow_of_2. ring.
 Qed.
@@ -560,40 +589,16 @@ Hint Unfold noConfusion_nat : equations.
 
 Opaque binary_mult_be.
 Lemma binary_mult_correct {n m} (x : bits m) (y : bits n) z : 
-  binary_mult_be x y = (z, false) -> nat_of_binary_be x * nat_of_binary_be y = nat_of_binary_be z.
-Proof. intros. funelim (binary_mult_be x y); simpdep; auto.
+  binary_mult_be x y = (z, false) -> [: x ] * [: y ] = [: z ].
+Proof. intros. funelim (binary_mult_be x y). 
 
-  simpl. rewrite nat_of_binary_zero. reflexivity. 
+  auto with binary.
 
   apply binary_shiftl_n_be_correct in Heq0.
   apply binary_plus_be_correct_full in H. 
-  rewrite H, Heq0, <- (Hind _ Heq) ; auto. simpl.
+  rewrite H, Heq0, <- (Hind _ Heq) ; auto.
   ring.
 Qed.
-  
-(*  case_eq_rew (binary_mult_be v y) multxy.
-  simp binary_mult_be in *.
-  destruct o ; simp binary_mult_be in *. noconf x.
-  rewrite <- x0. omega.
-
-  induction x ; intros.
-  simp binary_mult_be in H. noconf H.
-  rewrite nat_of_binary_zero. reflexivity. 
-
-  destruct a; simp binary_mult_be in H.
-  case_eq_rew (binary_shiftl_n y n0) shiftlyn0.
-  simp binary_mult_be in H.
-
-  destruct o ; try noconf H. 
-  simp binary_mult_be in H.
-  case_eq_rew (binary_mult_be x y) multxy. 
-  destruct o; simp binary_mult_be in H; try noconf H.
-  apply binary_shiftl_n_be_correct in shiftlyn0.
-  apply binary_plus_be_correct in H.
-  rewrite H. rewrite shiftlyn0. 
-  rewrite <- multxy in IHx. specialize (IHx _ multxy). rewrite <- IHx.
-  ring.
-*)
 
 Transparent binary_mult_be.
 
@@ -623,43 +628,34 @@ binary_mult_full_be (S n) m (Vcons true n tlx) y <=
 Opaque binary_shiftl_full.
 
 Lemma binary_shiftl_full_be_correct {n} (t : bits n) : 
-  nat_of_binary_be (binary_shiftl_full t) = 2 * nat_of_binary_be t.
+  [: binary_shiftl_full t ] = 2 * [: t ].
 Proof. intros. depind t; simp binary_shiftl_full.
   simpl.
   destruct a. rewrite IHt. simp pow_of_2. omega.
 
   assumption.
 Qed.
+Hint Rewrite @binary_shiftl_full_be_correct : binary.
 
 Lemma binary_shiftl_full_n_be_correct {n} (t : bits n) m :
-  nat_of_binary_be (binary_shiftl_n_full t m) = pow_of_2 m * nat_of_binary_be t.
-Proof. intros. depind m; simp binary_shiftl_n_full; simpl. omega.
-  rewrite binary_shiftl_full_be_correct, IHm. 
-  rewrite mult_assoc. replace (2 * pow_of_2 m) with (pow_of_2 (S m)).
-  reflexivity. simp pow_of_2 ; omega.
+  [: binary_shiftl_n_full t m ] = pow_of_2 m * [: t ].
+Proof. funelim (binary_shiftl_n_full t m). 
+  autorewrite with binary pow_of_2 zarith. rewrite H. ring.
 Qed.
-
-Hint Rewrite @binary_shiftl_full_be_correct @binary_shiftl_full_n_be_correct : binary.
-(* Hint Rewrite (@binary_shiftl_be_correct true) (@binary_shiftl_be_correct false) *)
-(*   @binary_shiftl_n_be_correct : binary. *)
+Hint Rewrite @binary_shiftl_full_n_be_correct : binary.
   
 Transparent binary_shiftl.
 
 Opaque binary_mult_full_be.
 
 Lemma binary_mult_full_be_correct {n m} (x : bits m) (y : bits n) : 
-  nat_of_binary_be (binary_mult_full_be x y) = nat_of_binary_be x * nat_of_binary_be y.
+  [: binary_mult_full_be x y ] = [: x ] * [: y ].
 Proof.
-  intros n m x y. 
-  funelim (binary_mult_full_be x y); auto.
-  
-  simpl. rewrite nat_of_binary_zero. reflexivity.
-  
-  rewrite zx_be_correct. now rewrite H.
+  funelim (binary_mult_full_be x y); auto with binary.
 
   apply binary_plus_be_correct_full in Heq.
   rewrite Hind in *. autorewrite with binary in *.
-  simpl. destruct o. destruct Heq.
+  simpl. destruct b. destruct Heq.
   rewrite H0. ring_simplify. omega.
 
   rewrite Heq. ring_simplify. omega.
@@ -670,7 +666,7 @@ Hint Rewrite @binary_mult_full_be_correct : binary.
 Program Instance bvec_binary_be n : Binary BigEndian (bits (S n)) := {
   bin_size t := S n ;
   
-  bin_of_nat := binary_of_nat_be (S n);
+  bin_of_nat t := binary_of_nat_be t (S n);
   nat_of_bin := nat_of_binary_be;
 
   bin_succ := bits_succ_be ;
@@ -712,7 +708,7 @@ Proof. reduce_goal. funelim (binary_be_le x x); intros ; auto.
 Qed.
 
 Instance: BoolTransitive (@binary_be_le n).
-Proof. reduce_goal. funelim (binary_be_le x y); simpdep; auto.
+Proof. reduce_goal. funelim (binary_be_le x y).
   destruct a ; noconf Heq. depelim z. 
   destruct a ; simp binary_be_le in *. noconf H0.
 
@@ -720,8 +716,8 @@ Proof. reduce_goal. funelim (binary_be_le x y); simpdep; auto.
   destruct a; destruct a0; noconf Heq; destruct a1; simp binary_be_le in *.
 Qed.
 
-Lemma binary_be_le_correct {n} (x y : bits n) : if binary_be_le x y then nat_of_binary_be x <= nat_of_binary_be y
-  else nat_of_binary_be y < nat_of_binary_be x.
+Lemma binary_be_le_correct {n} (x y : bits n) : if binary_be_le x y then [: x ] <= [: y ]
+  else [: y ] < [: x ].
 Proof. 
   intros. funelim (binary_be_le x y); auto.
   destruct a0; destruct a; noconf Heq; simpl.
@@ -734,7 +730,7 @@ Qed.
 
 Hint Extern 0 => omega : omega.
 
-Lemma binary_be_le_view {n} (x y : bits n) : binary_be_le x y = true <-> nat_of_binary_be x <= nat_of_binary_be y. 
+Lemma binary_be_le_view_true {n} (x y : bits n) : binary_be_le x y = true <-> [: x ] <= [: y ]. 
 Proof. intros. funelim (binary_be_le x y); auto.
 
   simpl. firstorder.
@@ -750,7 +746,7 @@ Proof. intros. funelim (binary_be_le x y); auto.
   clear H. omega.
 Qed.
 
-Lemma binary_be_le_view' {n} (x y : bits n) : binary_be_le x y = false <-> nat_of_binary_be y < nat_of_binary_be x. 
+Lemma binary_be_le_view_false {n} (x y : bits n) : binary_be_le x y = false <-> [: y ] < [: x ]. 
 Proof. intros. 
   funelim (binary_be_le x y); auto.
 
@@ -766,19 +762,25 @@ Proof. intros.
   rewrite H. split ; intros ; auto with arith. 
   clear H. omega.
 Qed.
-  
-Definition binary_be_lt {n} (x y : bits n) := 
-  let '(x', overflow) := bits_succ_be x in
-    if overflow then false
-    else binary_be_le x' y.
+
+Inductive binary_be_le_view {n} (x y : bits n) : bool -> Prop :=
+| binary_be_le_view_le : [: x ] <= [: y ] -> binary_be_le_view x y true
+| binary_be_le_view_gt : [: y ] < [: x ] -> binary_be_le_view x y false.
+
+Lemma binary_be_le_is_view {n} (x y : bits n) : binary_be_le_view x y (binary_be_le x y).
+Proof. case_eq (binary_be_le x y); intros. 
+  constructor 1. apply -> @binary_be_le_view_true; assumption.
+  constructor 2. apply -> @binary_be_le_view_false; assumption.
+Qed.
+
+Equations(nocomp) binary_be_lt {n} (x y : bits n) : bool :=
+binary_be_lt n x y <= bits_succ_be x => {
+  | pair x' true := false ;
+  | pair x' _ := binary_be_le x' y }.
 
 Instance: BoolIrreflexive (@binary_be_lt n).
-Proof. reduce_goal.
-  unfold binary_be_lt.
-  case_eq (bits_succ_be x).
-  intros. destruct o. reflexivity.
-
-  apply bits_succ_be_correct in H.
-  rewrite binary_be_le_view'.
-  rewrite H. omega.
+Proof. reduce_goal. funelim_call @binary_be_lt. 
+  apply bits_succ_be_correct in Heq.
+  rewrite binary_be_le_view_false.
+  rewrite Heq. omega.
 Qed.

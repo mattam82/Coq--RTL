@@ -52,8 +52,6 @@ vfold_right2 A B C f e ?(O) Vnil Vnil := e ;
 vfold_right2 A B C f e ?(S n) (Vcons hdv n tlv) (Vcons hdv' n tlv') := 
   f n hdv hdv' (vfold_right2 f e tlv tlv').
 
-Print  vfold_right2_obligation_2.
-
 Lemma Vcons_append_one {A n} (a : A) (v : vector A n) : exists a' v', (Vcons a v) = vector_append_one v' a'.
 Proof. intros. revert a.
   induction v.

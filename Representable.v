@@ -10,17 +10,17 @@ Require Import CSDL.Binary CSDL.BinaryBe CSDL.BinaryLe.
 Class Representable (e : endianness) (t : nat) (c : nat) := mkRepresentable {
   representation : bits t ;
   is_representation : 
-    if e then binary_of_nat_be t c = Some representation
+    if e then binary_of_nat_be c t = Some representation
     else binary_of_nat_le t c = Some representation }.
 
 (** This instance tries to run a conversion function and produces a proof 
    that the natural is representable. *)
 
 Ltac fast_be_representation t c :=
-  let repr := eval vm_compute in (binary_of_nat_be t c) in
+  let repr := eval vm_compute in (binary_of_nat_be c t) in
     match repr with
       | Some ?c' => set (foo:= @mkRepresentable BigEndian t c c' 
-        (@eq_refl _ (Some c') <: binary_of_nat_be t c = Some c'))
+        (@eq_refl _ (Some c') <: binary_of_nat_be c t = Some c'))
       | None => fail 1
     end.
 
@@ -44,7 +44,7 @@ Eval compute in (representation 3 7).
 Lemma nat_of_binary_representation `{R : Representable BigEndian t n} : 
   nat_of_binary_be (representation t n) = n.
 Proof with auto with *.
-  intros. destruct R. now apply nat_of_binary_binary_of_nat_inverse.
+  intros. destruct R. now apply nat_of_binary_binary_of_nat_inverse. 
 Qed.
 
 Definition fourty_five := (representation 32 45).

@@ -8,7 +8,7 @@ Global Generalizable All Variables.
 Class Injective {A B} (f : A -> B) :=
   injective : forall x y, f x = f y -> x = y.
 
-Ltac inject H := first [ apply injective in H | simpl in H; apply injective in H ] ; subst.
+Ltac inject H := first [ apply injective in H | simpl in H; apply injective in H | noconf H ] ; subst.
 
 Ltac case_eq_rew :=
   fun x H => generalize (@eq_refl _ x); pattern x at - 1 in |- *; case x ; intros until 1 ;
@@ -94,7 +94,6 @@ euclid n m H <= dec (ltb n m) => {
   | right p <= euclid (n - m) m => {
     | pair q r := (S q, r) }
 }.
-
   Next Obligation.
     unfold ltb in *.
     apply leb_complete_conv in p. unfold Have in *. apply euclid. omega.
@@ -102,9 +101,10 @@ euclid n m H <= dec (ltb n m) => {
 
   Next Obligation.
     rec n rn.
-    unfold add_pattern.
-    simp euclid. constructor. depelim_term (dec (ltb x m)). simp euclid.
-    rewrite euclid_helper_1_equation_2.
+    unfold add_pattern. simp euclid.
+    constructor.
+    depelim_term (dec (ltb x m)). 
+    constructor. 
     constructor. apply leb_complete_conv in e. apply rn. unfold Have in *. omega.
     depelim_term (euclid (x - m) m). autorewrite with euclid. constructor.
   Defined.
@@ -222,10 +222,10 @@ Proof.
 
     simp euclid. destruct_call dec. simp euclid. 
     apply leb_complete in e. 
-    ring_simplify in e. set(foo:=y * n) in e; exfalso; omega.
+    ring_simplify in e. set(foo:=n * y) in e; exfalso; omega.
     
     rewrite euclid_helper_1_equation_2.
-    replace (y + n * y - y) with (n * y). rewrite IHn. simp euclid.
+    replace (S n * y - y) with (n * y). rewrite IHn. simp euclid.
     auto with arith.
 Qed.
 
@@ -242,10 +242,6 @@ Lemma pow_of_2_positive_Sn n : pow_of_2_positive (S n) = Pmult (pow_of_2_positiv
 Proof. simp pow_of_2_positive. rewrite Pmult_comm. simpl.
   reflexivity.
 Qed.
-
-(* Equations(nocomp) pow_of_2 (n : nat) : nat := *)
-(* pow_of_2 O := 1 ; *)
-(* pow_of_2 (S n) := 2 * pow_of_2 n. *)
 
 Equations(nocomp) div2_rest (n : nat) : nat * bool :=
 div2_rest O := (0, false) ;

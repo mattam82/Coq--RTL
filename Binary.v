@@ -71,7 +71,8 @@ Proof. red. unfold Equivalence.equiv. intros.
     apply bool_eq_ok in eqxy. specialize (H eqv0). congruence.
 
   funelim (binary_eq x y).
-  noconf H0. rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
+  intro. noconf H0. 
+  rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
 Qed.
 
 Equations(nocomp) binary_shiftl {n} (t : bits n) : bits n * overflow :=
@@ -131,7 +132,7 @@ Require Import BoolEq.
 Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
 Proof. funelim (binary_eq x y).
 
-  noconf H1. rewrite bool_eq_refl, binary_eq_refl in H0. discriminate.
+  intro H1; noconf H1. rewrite bool_eq_refl, binary_eq_refl in H0. discriminate.
 Qed.
 
 Transparent binary_eq.

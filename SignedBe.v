@@ -46,7 +46,7 @@ Proof. intros. induction t. simpl. reflexivity. simpl. reflexivity. Qed.
 
 Lemma Z_of_signed_be_zero n : [Z: @zero n] = 0.
 Proof. induction n. simpl. reflexivity.
-  unfold zero. simp Z_of_signed_be binary.
+  unfold zero. simpl; simp Z_of_signed_be binary. 
 Qed.
 
 Lemma Z_of_signed_be_one n : [Z: @one (S n)] = 1.
@@ -56,9 +56,6 @@ Hint Rewrite Z_of_signed_be_zero Z_of_signed_be_one : binary.
 
 Lemma Z_of_nat_of_binary_be_bound {n} (t : bits n) : Z_of_nat [: t ] < pow_of_2_Z n.
 Proof. rewrite <- pow_of_2_nat_Z. apply inj_lt. apply nat_of_binary_bound. Qed.
-
-Lemma Z_of_nat_of_binary_be_bound' {n} (t : bits n) : Z_of_nat [: t ] < Zpos (pow_of_2_positive n).
-Proof. intros. apply Z_of_nat_of_binary_be_bound. Qed.
 
 Hint Resolve inj_lt @nat_of_binary_bound : zarith.
 
@@ -72,14 +69,12 @@ Lemma Z_of_signed_be_upper_bound_neg {n} (t : bits n) : [Z: true |:| t] < 0.
 Proof. simp Z_of_signed_be binary zarith. Qed.
 
 Lemma Z_of_signed_be_lower_bound_neg {n} (t : bits n) : [Z: true |:| t] >= - pow_of_2_Z n.
-Proof. simp Z_of_signed_be binary.
+Proof. simp Z_of_signed_be binary pow_of_2.
   rewrite Zopp_succ. unfold Zpred ; ring_simplify.
-  rewrite inj_minus, inj_S. unfold pow_of_2.
+  rewrite inj_minus, inj_S. simp pow_of_2. 
   ring_simplify. 
-  autorewrite with Z_of_nat zarith. 
-  rewrite Zmax_right. ring_simplify.
-  autorewrite with Z_of_nat zarith. omega.
-  generalize (Z_of_nat_of_binary_be_bound' t). intros ; omega.
+  rewrite Zmax_right. ring_simplify. omega.
+  generalize (Z_of_nat_of_binary_be_bound t). intros ; omega.
 Qed.
 
 Lemma Z_of_signed_be_upper_bound {n} (t : bits n) : [Z: t] < pow_of_2_Z (pred n).
@@ -186,7 +181,7 @@ Qed.
 
 Lemma Z_of_signed_be_full {n} : Z_of_signed_be (@full (S n)) = - 1.
 Proof.
-  intros. unfold full. simp Z_of_signed_be binary.
+  intros. unfold full; simpl. simp Z_of_signed_be binary.
   unfold Zpred ; ring_simplify.
   rewrite inj_minus.
   autorewrite with zarith Z_of_nat pow_of_2.
@@ -194,6 +189,7 @@ Proof.
 Qed.
 
 Hint Rewrite @Z_of_nat_binary_be_inverse @Z_of_signed_be_full : binary.
+Hint Rewrite Z_of_nat_of_binary_full : Z_of_nat.
 
 (** * Two's complement of a signed binary number. *)
 
@@ -206,46 +202,49 @@ two_s_complement n b <= bits_succ_be (binary_inverse b) => {
 Ltac zauto := auto with zarith || omega.
 
 Ltac zarith :=
-  autorewrite with binary zarith pow_of_2 Z_of_nat in * ; 
+  autorewrite with Z_of_signed_be binary zarith pow_of_2 Z_of_nat in * ; 
     try ring_simplify ; try zauto ; add_bounds ; try zauto.
 
 Hint Unfold full zero : binary.
+
+Instance bits_succ_be_correct_Z (t : nat) (b c : bits (S t)) o : 
+  provided bits_succ_be b = (c, o) 
+  have
+    if negb (Vhead b) && (Vhead c) then 
+      b = (false |:| full) /\ c = binary_inverse b    
+    else [Z: c ] = Zsucc [Z: b].
+Proof. intro. Opaque bits_succ_be. 
+  funelim (bits_succ_be b); correct Heq; subst.
+
+  simp binary.
   
-Lemma bits_succ_be_correct_Z (t : nat) (b c : bits (S t)) o : bits_succ_be b = (c, o) -> 
-  if negb (Vhead b) && (Vhead c) then 
-    b = (false |:| full) /\ c = binary_inverse b    
-  else [Z: c ] = Zsucc [Z: b].
-Proof. Opaque bits_succ_be. funelim (bits_succ_be b). 
-
-  correctness Heq. simp binary.
-  correctness Heq. Opaque Zminus. 
+  Opaque Zminus. 
   simp Z_of_signed_be binary zarith. rewrite Heq. 
-  ring_simplify. unfold Zpred. zarith. 
-
-  correctness Heq. split ; simp binary. unfold full. simp binary.
-
-  correctness Heq. simp binary Z_of_signed_be. rewrite Heq. zarith.
+  ring_simplify. unfold Zpred. zarith.
+  
+  unfold full. intuition; simp binary.
+ 
+  simp binary Z_of_signed_be. rewrite Heq. zarith.
 Qed.
 
 (** Correctness proof for two's complement. Only overflowing case is if we're taking
    the opposite of [-2^n]. *)
 Transparent two_s_complement.
-Lemma two_s_complement_correct {n} (x : bits (S n)) compl o : two_s_complement x = (compl, o) ->
-  if o then x = min_signed /\ compl = x
-  else [Z: compl ] = - [Z: x ].
-Proof. 
-  funelim (two_s_complement x). 
-  destruct b0. correctness Heq.
-  apply binary_inverse_is_constant in H. subst.
-  simpl. zarith.
+Instance two_s_complement_correct {n} (x : bits (S n)) compl o : 
+  provided two_s_complement x = (compl, o)
+  have
+    if o then x = min_signed /\ compl = x
+    else [Z: compl ] = - [Z: x ].
+Proof. intro. 
+  funelim (two_s_complement x); correct Heq; subst.
 
-  apply bits_succ_be_correct_Z in Heq.
-  depelim compl; depelim b; simpl in *.
+  clear b0. autorewrite with binary in *.
+  depelim b; depelim compl.
+  simpl in *.
   destruct a; destruct a0; simpl in *; destruct_conjs;
-    try rewrite ! Heq; try noconf Heq; try noconf Heq'; try split; 
-      simp binary Z_of_signed_be in *; zarith. unfold full in *.
-  noconf H.
-  apply binary_inverse_is_constant in H. subst. reflexivity.
+    rew* ; simp Z_of_signed_be in *; zarith. 
+  noconf H; noconf H0.
+  apply binary_inverse_is_constant in H. subst. now trivial.
 Qed.
 
 Require Import ROmega.
@@ -265,31 +264,30 @@ signed_plus_be n (Vcons s n t) (Vcons s' _ t') <= binary_plus_be t t' => {
 
 Ltac Z_of_nat := simp Z_of_nat_inv Z_of_nat.
 
-Lemma binary_plus_be_correct_Z n : forall (t t' : bits n) tt' o, binary_plus_be t t' = (tt', o) ->
+Instance binary_plus_be_correct_Z n (t t' : bits n) tt' o :
+  provided binary_plus_be t t' = (tt', o)
+  have
   let add' := Z_of_nat [: t ] + Z_of_nat [: t'] in
     if o then add' >= pow_of_2_Z n /\
       Z_of_nat [: tt' ] = add' - pow_of_2_Z n
     else Z_of_nat [: tt' ] = add'.
-Proof.
-  intros. 
-  apply binary_plus_be_correct_full in H. subst add'.
-  destruct o ; program_simpl.
-  rewrite H0.
-  assert(Z_of_nat [: t] + Z_of_nat [: t'] >= pow_of_2_Z n) by Z_of_nat.
-  split ; Z_of_nat. Z_of_nat.
+Proof. intro. correct H.
+  destruct o ; program_simpl; zarith.
+  rewrite H0; Z_of_nat. zarith.
 Qed.
 
 (** Signed multiplication correctness. *)
   
-Lemma signed_plus_be_correct n : forall (t t' : bits (S n)) tt', signed_plus_be t t' = (tt', false) ->
-  [Z: tt' ] = [Z: t ] + [Z: t' ].
-Proof.
-  intros. funelim (signed_plus_be t t'); simp binary Z_of_signed_be.
-  rewrite add_bits_correct in Heq.
-  destruct b; destruct b1; noconf H2; apply binary_plus_be_correct_Z in Heq0; [destruct Heq0|];
-  noconf Heq;
-  destruct a ; destruct a0 ; try noconf H1 ; simp binary Z_of_signed_be; try rewrite H0; 
-    unfold Zpred; zarith.
+Instance signed_plus_be_correct n (t t' : bits (S n)) tt' : 
+  provided signed_plus_be t t' = (tt', false)
+  have [Z: tt' ] = [Z: t ] + [Z: t' ].
+Proof. intro. 
+  funelim (signed_plus_be t t'); simp binary Z_of_signed_be. 
+  correct Heq0.
+  destruct b0; funelim (add_bits a a0 b); try noconf Heq; try noconf H2;
+    simp binary Z_of_signed_be; 
+    destruct_conjs; autorewrite_local;
+    zarith.
 Qed.
 
 (** If there is an overflow, the sign depends on the sign of the result. *)
@@ -305,17 +303,25 @@ Hint Rewrite Z_of_sign_0 Z_of_sign_1 : zarith.
 Hint Rewrite andb_true_l andb_true_r orb_true_l orb_true_r xorb_true_l xorb_true_r 
   andb_false_l andb_false_r orb_false_l orb_false_r xorb_false_l xorb_false_r 
   negb_involutive : bool.
+Transparent Zminus.
+Hint Opaque Zminus Zplus Zmult Zdiv : zarith.
 
-Lemma signed_plus_be_overflow n : forall (t t' : bits (S n)) tt', signed_plus_be t t' = (tt', true) ->
-  Z_of_signed_be tt' + Z_of_sign (negb (Vhead tt')) * pow_of_2_Z (S n) = Z_of_signed_be t + Z_of_signed_be t'.
-Proof.
-  intros. funelim (signed_plus_be t t').
+Ltac simpl_ctx :=
+  simpl in * |-; destruct_conjs; autorewrite_local.
+
+Hint Extern 0 => progress simpl_ctx : solve.
+Hint Extern 0 => progress (simp binary pow_of_2 Z_of_signed_be Z_of_nat) : solve.
+
+Instance signed_plus_be_overflow n (t t' : bits (S n)) tt' : 
+  provided signed_plus_be t t' = (tt', true)
+  have [Z: tt'] + Z_of_sign (negb (Vhead tt')) * pow_of_2_Z (S n) = 
+   [Z: t ] + [Z: t'].
+Proof. intro.
+  funelim (signed_plus_be t t').
+  correct Heq0. 
   destruct b; destruct b1; noconf H2. rewrite add_bits_correct in Heq. noconf Heq.
-  destruct a; destruct a0; noconf H; simp binary Z_of_signed_be.
-  apply binary_plus_be_correct_Z in Heq0. destruct Heq0. rewrite H0. zarith.
-  
-  destruct a; destruct a0; noconf Heq; simp binary Z_of_signed_be.
-  apply binary_plus_be_correct_Z in Heq0. rewrite Heq0. zarith.
+  destruct a; destruct a0; noconf H. simpl. zarith.
+  destruct a; destruct a0; noconf Heq. simpl. zarith.
 Qed.
 
 (** Signed substraction [signed_plus_be] is just addition of the opposite. *)
@@ -324,11 +330,6 @@ Equations(nocomp) signed_minus_be {n} (x y : bits (S n)) : bits (S n) * borrow :
 signed_minus_be n x y <= two_s_complement y => {
   | pair compl true := (y, true) ;
   | pair compl false := signed_plus_be x compl }.
-
-(* Definition signed_minus_be {n} (x y : bits (S n)) : bits (S n) * borrow := *)
-(*   let '(compl, o) := two_s_complement y in *)
-(*     if o then (y, o) *)
-(*     else signed_plus_be x compl. *)
   
 Transparent Zmult Zdouble.
 Lemma signed_minus_be_correct {n} (x y t : bits (S n)) b : 
@@ -337,13 +338,11 @@ Lemma signed_minus_be_correct {n} (x y t : bits (S n)) b :
     (y = min_signed /\ t = y) \/
     (Z_of_signed_be t + Z_of_sign (negb (Vhead t)) * pow_of_2_Z (S n) = Z_of_signed_be x - Z_of_signed_be y)
   else Z_of_signed_be t = (Z_of_signed_be x - Z_of_signed_be y)).
-Proof. intro. funelim (signed_minus_be x y).
-  apply two_s_complement_correct in Heq. intuition.
-  apply two_s_complement_correct in Heq. 
-  destruct b. apply signed_plus_be_overflow in H.
-  rewrite Heq in H. right ; auto.
+Proof. intro.
+  funelim (signed_minus_be x y); correct Heq; simpl in Heq. 
+    left. intuition.
 
-  apply signed_plus_be_correct in H. rewrite H, Heq. reflexivity.
+    destruct b; correct H; rew*; auto. 
 Qed.
 
 Hint Rewrite @signed_minus_be_correct : signed_minus_be.
@@ -357,7 +356,6 @@ Ltac bang :=
 Hint Extern 4 => bang : exfalso.
 
 Tactic Notation "apply" "*" constr(c) := apply c || symmetry ; apply c.
-
 
 (** Representing integers by signed binary numbers. *)
 
@@ -383,20 +381,17 @@ Eval compute in (option_map Z_of_signed_be (@signed_of_Z_be 7 127)).
 Hint Rewrite <- Pplus_one_succ_r : positive.
 Hint Rewrite Psucc_o_double_minus_one_eq_xO : positive.
 
-Theorem Z_of_signed_of_Z_inverse n z b :
-  impl (@signed_of_Z_be n z = Some b) ([Z: b] = z).
-Proof. intro. Opaque Zminus. 
-  funelim (signed_of_Z_be (n:=n) z); simp Z_of_signed_be binary.
-
-  zarith. 
+Instance Z_of_signed_of_Z_inverse n z b :
+  provided @signed_of_Z_be n z = Some b
+  have [Z: b] = z.
+Proof. intro.
+  funelim (signed_of_Z_be (n:=n) z); simp Z_of_signed_be Z_of_nat binary.
 
   clear H. destruct n; try noconf e. apply leb_complete in e. 
   zarith.
 
-  clear H. apply leb_complete in e. zarith. 
-  rewrite Zpos_eq_Z_of_nat_o_nat_of_P. zarith.
-  Transparent Zminus. unfold Zminus. simpl.
-  autorewrite with positive. reflexivity.
+  clear H. apply leb_complete in e. repeat zarith.
+  simpl. autorewrite with positive. reflexivity.
 Qed.
 
 Derive NoConfusion for positive.
@@ -411,8 +406,8 @@ Theorem sx_correct {n} (b : bits (S n)) m : [Z: sx_be b m] = [Z: b].
 Proof. Opaque Zminus. funelim (sx_be b m); simp binary Z_of_signed_be; zarith. Qed.
 
 Lemma psize_psucc `(Have (Psize (Psucc p) <= n)%nat) : Have (Psize p <= n)%nat. 
-Proof. unhave. revert n H ; induction p ; simpl ; intros ; auto.
-  destruct n. inversion H. apply le_n_S. auto with *. auto with *.
+Proof. unhave. revert n H ; induction p ; simpl ; intros ; auto;
+  destruct n; auto with *.
 Qed.
 
 Hint Extern 0 (Have (Psize ?p <= ?n)%nat) => 
@@ -451,7 +446,6 @@ Proof.
   induction n ; intros. simp pow_of_2 in H.
   unfold Zgt in H. destruct p; noconf H.
 
-   Opaque pow_of_2_Z Zmult.
   destruct p; simpl in H; simpl; auto with arith;
   exploit (IHn p); simp pow_of_2 in H; zarith;
   auto with arith.
@@ -493,11 +487,11 @@ Eval compute in (Zbits (-pow_of_2_Z 4)).
 *)
 Transparent pow_of_2_Z Zminus.
 
-Lemma Psize_monotone : forall p q, (p <= q)%positive -> (Psize p <= Psize q)%nat.
-Proof.
+Instance Psize_monotone : Proper (Ple ==> le) Psize.
+Proof. intros p.
   assert (le0 : forall n, (0<=n)%nat) by (induction n; auto).
   assert (leS : forall n m, (n<=m -> S n <= S m)%nat) by (induction 1; auto).
-  induction p; destruct q; simpl; auto with exfalso; intros; try discriminate.
+  induction p; intros q; destruct q; simpl; auto with exfalso; intros; try discriminate.
   apply leS. apply IHp. 
   intro.
   unfold Ple in H. simpl in H.
@@ -509,7 +503,6 @@ Proof.
 Qed.
 
 Hint Resolve Zgt_pos_0 : zarith.
-
 
 Lemma Zbits_monotone_pos : forall p q, p >= 0 -> p <= q -> (Zbits p <= Zbits q)%nat.
 Proof. intros. destruct p ; destruct q ; simpl ; auto with arith exfalso.
@@ -527,10 +520,6 @@ Proof. simpl. reflexivity. Qed.
 
 Lemma S_Psize_1 p : S (Psize p) = Psize (p~1).
 Proof. simpl. reflexivity. Qed.
-
-
-Instance Psize_le : Proper (Ple ==> le) Psize.
-Proof. reduce. apply Psize_monotone. auto. Qed.
 
 Instance Plt_Ple : subrelation Plt Ple.
 Proof. reduce. red in H. rewrite H in H0. discriminate. Qed.
@@ -634,6 +623,9 @@ Lemma Zbits_neg p : Zbits (Zneg p) = Zbits
   end).
 Proof. induction p; simpl; auto. Qed.
 
+Hint Resolve Psize_monotone Ppred_le : positive.
+Hint Unfold Zbits : zarith.
+
 Lemma Zbits_monotone_neg : forall p q, q < 0 -> p <= q -> (Zbits q <= Zbits p)%nat.
 Proof. intros.
   destruct p ; destruct q ; auto with arith exfalso.
@@ -641,20 +633,9 @@ Proof. intros.
   red in H0. simpl in H0. rewrite Pcompare_antisym in H0. simpl in H0.
   change (p0 <= p)%positive in H0.
   rewrite ! Zbits_neg.
-  simpl. destruct p0; destruct p;
-    try solve [ simpl in *; simpl; repeat apply le_n_S; try 
-      red in H0; simpl in *; try discriminates; auto with arith].
-
-  simpl Zbits. repeat apply le_n_S.
-  apply Psize_monotone. auto.
-  unfold Zbits. apply le_n_S. apply Psize_monotone.
-  apply Ppred_le. auto.
-
-  unfold Zbits.
-  apply le_n_S. apply Psize_le. apply Ppred_le. assumption.
-
-  unfold Zbits.
-  apply le_n_S. apply Psize_le. apply Ppred_le. assumption.
+  destruct p0; destruct p; 
+    try (red in H0 ; simpl in H0) ;
+    try solve [ try discriminates; unfold Zbits; auto with arith positive ].
 Qed.
 
 Lemma Zsize_monotone_pos : forall p q, p >= 0 -> p <= q -> (Zsize p <= Zsize q)%nat.
@@ -705,8 +686,8 @@ Qed.
 Instance inj_inverse n : Injective (@binary_inverse n) := Vunary_inj negb_inj.
 
 Instance: Injective (@Z_of_signed_be n).
-Proof. reduce. funelim [Z: x]; funelim [Z: y]; rewrite <- H0 in H;
-  try solve [now repeat inject H].
+Proof. reduce. funelim [Z: x]; funelim [Z: y];
+  try solve [now repeat inject H]. 
 
   pose (Z_of_nat_pos). absurd_arith.
   pose (Z_of_nat_pos). absurd_arith.
@@ -742,7 +723,7 @@ Qed.
 
 Lemma Zsize_pow_of_2 n : Zsize (pow_of_2_Z n) = S n.
 Proof.
-  induction n; simp pow_of_2; simpl in *; zarith. 
+  induction n; simp pow_of_2; simpl in *; zarith.
 Qed.
 
 Lemma Zbits_pow_of_2 n : Zbits (pow_of_2_Z n) = S (S n).
@@ -757,7 +738,7 @@ Transparent binary_of_pos_be.
 
 Lemma Zbits_opp_pow_of_2 n : (Zbits (- pow_of_2_Z n) = S n)%nat.
 Proof.
-  induction n; simp pow_of_2; simpl in *; zarith. Transparent Zplus Zmult. simpl.
+  induction n; simp pow_of_2; simpl in *; zarith.
   destruct_call pow_of_2_positive; simpl in *; noconf IHn. omega.
 Qed.
 

@@ -66,9 +66,6 @@ Fixpoint div10 n : nat * nat :=
 
 Notation "( x & y )" := (existS _ x y) : core_scope.
 
-Check euclid.
-
-
 Open Local Scope char_scope.
 
 Obligation Tactic := program_simpl ; auto.
@@ -123,9 +120,6 @@ Program Fixpoint print_nat (x : nat) { wf lt x } : string :=
     intros. simpl in H0. subst.
     destruct_call euclid. destruct H0 ; auto.
   Qed.
-
-
-  Next Obligation. auto with *. Defined.
 
 Example print2000 := Eval lazy in (print_nat 2000).
 

@@ -197,7 +197,7 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space_descr) 
         exact None.
 
       (* EQ *)
-      red in e0. subst agg q. rewrite quotient_cancel. exact c.
+      subst agg q. rewrite quotient_cancel. exact c.
       assumption.
 
       (* GT *)
@@ -206,7 +206,7 @@ Definition mem_cell_store_agg {w} (m : mem) (e : endianness) (sp : space_descr) 
       exploit o. clear o. subst w'. unhave. red. 
       assert(q > 1). subst q. now apply quotient_gt_1.
       red in H0. rewrite l in H0. 
-      setoid_replace sp'.(space_cell_size) with (1 * sp'.(space_cell_size)) at 1; [| unfold ty; red; omega].
+      setoid_replace sp'.(space_cell_size) with (1 * sp'.(space_cell_size)) at 1; [| unfold ty; omega].
       now apply mult_lt_compat.
       
       subst w'. rewrite modulo_cancel. reflexivity. 

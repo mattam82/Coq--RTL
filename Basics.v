@@ -88,20 +88,21 @@ Instance: WellFounded lt := lt_wf.
 Ltac rec ::= rec_wf_eqns.
 
 Equations euclid (n : nat) (m : nat) `{Have (m > 0)} : nat * nat :=
-euclid n m H => rec n =>
+euclid n m H by rec n :=
 euclid n m H <= dec (ltb n m) => {
   | left _ := (0, n) ;
   | right p <= euclid (n - m) m => {
     | pair q r := (S q, r) }
 }.
+
   Next Obligation.
     unfold ltb in *.
     apply leb_complete_conv in p. unfold Have in *. apply euclid. omega.
   Defined.
 
   Next Obligation.
-    rec n rn.
-    unfold add_pattern. simp euclid.
+    rec_wf n rn.
+    simp euclid.
     constructor.
     depelim_term (dec (ltb x m)). 
     constructor. 
@@ -112,13 +113,6 @@ euclid n m H <= dec (ltb n m) => {
 Transparent euclid.
 
 Eval compute in (euclid 8 4).
-
-Ltac ind_on f := 
-  match goal with
-    |- context [ f ?x ] => let term := fresh "term" in 
-      pattern_tele x term ; pattern_call (f term) ; subst term ;
-        apply Fix_sub_rect ; fold f ; unfold MR in * ; simpl ; intros
-  end.
 
 Ltac funelim f ::= funelim_tac f ltac:(fun f => simpl in *; simpdep).
 

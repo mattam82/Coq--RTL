@@ -61,6 +61,8 @@ Proof. funelim (binary_eq b b).
     rewrite bool_eq_refl. simpl ; auto.
 Qed.
 
+Derive NoConfusion for vector.
+
 Instance const_eq n : EqDec (bits n) eq.
 Proof. red. unfold Equivalence.equiv. intros. 
   case_eq_rew (binary_eq x y) eqxy ; [ left | right ].

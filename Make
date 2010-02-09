@@ -10,4 +10,5 @@ SignedBe.v
 Representable.v
 Show.v
 Hexadecimal.v
+Range.v
 csdl.v

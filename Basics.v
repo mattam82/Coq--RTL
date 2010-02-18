@@ -1,4 +1,5 @@
-Require Export Arith Program Equations.Equations Have Morphisms EquivDec.
+Require Export Arith Program Equations.Equations Have EquivDec.
+Require Import Setoid Morphisms.
 Require Export Relation_Definitions.
 
 Global Set Automatic Introduction.
@@ -401,3 +402,18 @@ Hint Rewrite plus_0_r plus_0_l plus_n_Sm minus_diag
 Hint Rewrite <- pred_Sn mult_n_O mult_n_Sm minus_n_O
   minus_plus_simpl_l_reverse
   : arith.
+
+Instance Psize_monotone : Proper (Ple ==> le) Psize.
+Proof. intros p.
+  assert (le0 : forall n, (0<=n)%nat) by (induction n; auto).
+  assert (leS : forall n m, (n<=m -> S n <= S m)%nat) by (induction 1; auto).
+  induction p; intros q; destruct q; simpl; auto with exfalso; intros; try discriminate.
+  apply leS. apply IHp. 
+  intro.
+  unfold Ple in H. simpl in H.
+  apply H. rewrite Pcompare_Gt_eq_Gt. left ; auto.
+
+  unfold Ple in H. simpl in H.
+  apply leS. apply IHp. intro. apply H.
+  rewrite <- Pcompare_eq_Gt. auto.
+Qed.

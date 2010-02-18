@@ -331,7 +331,7 @@ Hint Rewrite bits_succ_vector_append_0 : binary.
 Open Local Scope vect_scope.  
 Open Local Scope bin_scope.  
 
-Equations(nocomp) binary_minus_be_carry {n} (x y : bits n) (carry : bit) : bits n * overflow :=
+Equations(nocomp) binary_minus_be_carry {n : nat} (x y : bits n) (carry : bit) : bits n * overflow :=
 binary_minus_be_carry O Vnil Vnil c := (Vnil, c) ;
 
 binary_minus_be_carry (S n) (Vcons true n tlx) (Vcons true n tly) c 
@@ -550,7 +550,7 @@ Opaque binary_mult_be.
 Instance binary_mult_correct {n m} (x : bits m) (y : bits n) z : 
   provided binary_mult_be x y = (z, false)
   have [: x ] * [: y ] = [: z ].
-Proof. intros. intro. funelim (binary_mult_be x y). 
+Proof. intro. funelim (binary_mult_be x y). 
 
   auto with binary.
 
@@ -575,9 +575,8 @@ Opaque binary_shiftl_full.
 
 Lemma binary_shiftl_full_be_correct {n} (t : bits n) : 
   [: binary_shiftl_full t ] = 2 * [: t ].
-Proof. intros. depind t; simp binary_shiftl_full.
-  simpl.
-  destruct a. rewrite IHt. simp pow_of_2. omega.
+Proof. depind t; simp binary_shiftl_full.
+  destruct a; simpl. rewrite IHt. simp pow_of_2. omega.
 
   assumption.
 Qed.
@@ -662,20 +661,19 @@ Qed.
 
 Lemma binary_be_le_correct {n} (x y : bits n) : if binary_be_le x y then [: x ] <= [: y ]
   else [: y ] < [: x ].
-Proof. 
-  intros. funelim (binary_be_le x y); auto.
+Proof. funelim (binary_be_le x y); auto.
   destruct a0; destruct a; noconf Heq; simpl.
   pose (nat_of_binary_bound v) ; omega.
   pose (nat_of_binary_bound v0) ; omega.
 
-  destruct a0; destruct a; noconf Heq. simpl. 
+  destruct a0; destruct a; noconf Heq.
   destruct_call @binary_be_le; omega.
 Qed.
 
 Hint Extern 0 => omega : omega.
 
 Lemma binary_be_le_view_true {n} (x y : bits n) : binary_be_le x y = true <-> [: x ] <= [: y ]. 
-Proof. split ; intros. generalize (binary_be_le_correct x y). rewrite H. auto. 
+Proof. split ; intros. generalize (binary_be_le_correct x y). rewrite H. auto.
   funelim (binary_be_le x y); auto.
 
   destruct a0; destruct a; noconf Heq; simpl.

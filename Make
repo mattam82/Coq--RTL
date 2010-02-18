@@ -12,3 +12,5 @@ Show.v
 Hexadecimal.v
 Range.v
 csdl.v
+EqDec_instr.v
+Validator.v

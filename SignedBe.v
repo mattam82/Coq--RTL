@@ -1,5 +1,5 @@
 Require Import CSDL.Binary CSDL.BinaryBe.
-Require Import ZArith.
+Require Import ZArith Morphisms Setoid.
 
 Open Local Scope vect_scope.
 Open Local Scope Z_scope.
@@ -276,6 +276,14 @@ Proof. intro. correct H.
   rewrite H0; Z_of_nat. zarith.
 Qed.
 
+Lemma Z_of_nat_minus_inj n m : (n >= m)%nat -> Z_of_nat (n - m) = Z_of_nat n - Z_of_nat m.
+Proof. intros. rewrite inj_minus. rewrite Zmax_right. auto. 
+simp Z_of_nat_inv.
+apply inj_le. Transparent Zminus. omega.
+Qed.
+
+Hint Rewrite Z_of_nat_minus_inj using auto with binary : Z_of_nat.
+
 (** Signed multiplication correctness. *)
   
 Instance signed_plus_be_correct n (t t' : bits (S n)) tt' : 
@@ -285,8 +293,8 @@ Proof. intro.
   funelim (signed_plus_be t t'); simp binary Z_of_signed_be. 
   correct Heq0.
   destruct b0; funelim (add_bits a a0 b); try noconf Heq; try noconf H2;
-    simp binary Z_of_signed_be; 
-    destruct_conjs; autorewrite_local;
+    simp binary Z_of_signed_be Z_of_nat;
+    destruct_conjs; rew*;
     zarith.
 Qed.
 
@@ -319,8 +327,9 @@ Instance signed_plus_be_overflow n (t t' : bits (S n)) tt' :
 Proof. intro.
   funelim (signed_plus_be t t').
   correct Heq0. 
-  destruct b; destruct b1; noconf H2. rewrite add_bits_correct in Heq. noconf Heq.
-  destruct a; destruct a0; noconf H. simpl. zarith.
+  destruct b; destruct b1; noconf H2; destruct_conjs.
+  rewrite add_bits_correct in Heq. noconf Heq.
+  destruct a; destruct a0; noconf H1. simpl. zarith. rewrite H0. zarith.
   destruct a; destruct a0; noconf Heq. simpl. zarith.
 Qed.
 
@@ -349,8 +358,8 @@ Hint Rewrite @signed_minus_be_correct : signed_minus_be.
 
 Ltac bang :=
   match goal with
-    | |- context [ False_rect _ ?p ] => elim p
-    | |- context [ False_rec _ ?p ] => elim p
+    | |- appcontext [ False_rect _ ?p ] => elim p
+    | |- appcontext [ False_rec _ ?p ] => elim p
   end.
 
 Hint Extern 4 => bang : exfalso.
@@ -487,27 +496,12 @@ Eval compute in (Zbits (-pow_of_2_Z 4)).
 *)
 Transparent pow_of_2_Z Zminus.
 
-Instance Psize_monotone : Proper (Ple ==> le) Psize.
-Proof. intros p.
-  assert (le0 : forall n, (0<=n)%nat) by (induction n; auto).
-  assert (leS : forall n m, (n<=m -> S n <= S m)%nat) by (induction 1; auto).
-  induction p; intros q; destruct q; simpl; auto with exfalso; intros; try discriminate.
-  apply leS. apply IHp. 
-  intro.
-  unfold Ple in H. simpl in H.
-  apply H. rewrite Pcompare_Gt_eq_Gt. left ; auto.
-
-  unfold Ple in H. simpl in H.
-  apply leS. apply IHp. intro. apply H.
-  rewrite <- Pcompare_eq_Gt. auto.
-Qed.
-
 Hint Resolve Zgt_pos_0 : zarith.
 
 Lemma Zbits_monotone_pos : forall p q, p >= 0 -> p <= q -> (Zbits p <= Zbits q)%nat.
 Proof. intros. destruct p ; destruct q ; simpl ; auto with arith exfalso.
   apply le_n_S.
-  apply Psize_monotone. apply H0.
+  apply Basics.Psize_monotone. apply H0.
 Qed.
 
 Lemma Psize_Pdoubleminus_one p : (Psize (Pdouble_minus_one p) <= S (Psize p))%nat.
@@ -623,7 +617,7 @@ Lemma Zbits_neg p : Zbits (Zneg p) = Zbits
   end).
 Proof. induction p; simpl; auto. Qed.
 
-Hint Resolve Psize_monotone Ppred_le : positive.
+Hint Resolve Basics.Psize_monotone Ppred_le : positive.
 Hint Unfold Zbits : zarith.
 
 Lemma Zbits_monotone_neg : forall p q, q < 0 -> p <= q -> (Zbits q <= Zbits p)%nat.
@@ -641,13 +635,13 @@ Qed.
 Lemma Zsize_monotone_pos : forall p q, p >= 0 -> p <= q -> (Zsize p <= Zsize q)%nat.
 Proof. intros. destruct p ; destruct q ; simpl ; auto with arith exfalso.
   generalize (Psize_pos p); omega.
-  apply Psize_monotone. apply H0.
+  apply Basics.Psize_monotone. apply H0.
 Qed.
 
 Lemma Zsize_monotone_neg : forall p q, q <= 0 -> p <= q -> (Zsize q <= Zsize p)%nat.
 Proof. intros. destruct p ; destruct q ; simpl ; auto with arith exfalso.
   generalize (Psize_pos p); omega.
-  apply Psize_monotone. 
+  apply Basics.Psize_monotone. 
   intro. apply ZC1 in H1. red in H0. simpl in H0. apply H0. unfold CompOpp. 
   rewrite H1. reflexivity.
 Qed.
@@ -745,7 +739,7 @@ Qed.
 Lemma Zsize_opp z : (Zsize (- z) <= S (Zsize z))%nat.
 Proof. destruct z ; simpl ; auto. Qed.
 
-Hint Resolve Psize_monotone : zarith.
+Hint Resolve Basics.Psize_monotone : zarith.
 Hint Resolve le_n_S : zarith.
 
 Instance: Proper (Ple ==> le) (fun x => Zsize (Zpos x)).

@@ -1,13 +1,20 @@
+Require Import Bvector.
 Require Export Arith Program Equations.Equations Have EquivDec.
 Require Import Setoid Morphisms.
 Require Export Relation_Definitions.
+Require Import SetoidTactics.
+Require Import BinPos Pnat.
+Require Import ZArith.
 
 Global Set Automatic Introduction.
-
 Global Generalizable All Variables.
+Set Firstorder Solver auto.
 
 Class Injective {A B} (f : A -> B) :=
   injective : forall x y, f x = f y -> x = y.
+Class Commutative {A B} (f : A -> A -> B) := commutative : Π x y, f x y = f y x.
+Class Absorbant {A} (f : A -> A -> A) (a : A) := absorbant : forall x, f a x = a.
+Class Neutral {A} (f : A -> A -> A) (a : A) := neutral : forall x, f a x = x.
 
 Ltac inject H := first [ apply injective in H | simpl in H; apply injective in H | noconf H ] ; subst.
 
@@ -24,8 +31,6 @@ Ltac destruct_call_eq f id :=
 Hint Extern 4 => discriminates : exfalso.
 
 Notation " 'convertible' x y " := (eq_refl : x = y) (at level 0, x at next level, y at next level).
-
-Ltac absurd_arith := intros ; elimtype False ; omega.
 
 Ltac simpdep := program_simpl; reverse; simpl; simplify_dep_elim ; simplify_IH_hyps.
 
@@ -88,6 +93,11 @@ Instance: WellFounded lt := lt_wf.
 
 Ltac rec ::= rec_wf_eqns.
 
+Lemma leb_Sn_m n m : Have (m > 0) -> ltb n m = false -> n - m < n. intros.
+  apply leb_complete_conv in H0. unhave; omega.
+Defined.
+Hint Resolve leb_Sn_m : subterm_relation.
+
 Equations euclid (n : nat) (m : nat) `{Have (m > 0)} : nat * nat :=
 euclid n m H by rec n :=
 euclid n m H <= dec (ltb n m) => {
@@ -95,21 +105,6 @@ euclid n m H <= dec (ltb n m) => {
   | right p <= euclid (n - m) m => {
     | pair q r := (S q, r) }
 }.
-
-  Next Obligation.
-    unfold ltb in *.
-    apply leb_complete_conv in p. unfold Have in *. apply euclid. omega.
-  Defined.
-
-  Next Obligation.
-    rec_wf n rn.
-    simp euclid.
-    constructor.
-    depelim_term (dec (ltb x m)). 
-    constructor. 
-    constructor. apply leb_complete_conv in e. apply rn. unfold Have in *. omega.
-    depelim_term (euclid (x - m) m). autorewrite with euclid. constructor.
-  Defined.
 
 Transparent euclid.
 
@@ -201,7 +196,6 @@ Proof. unfold modulo_nat, quotient_nat. generalize (euclid_spec x y).
   destruct_call euclid ; simpdep. destruct H0. subst x. ring_simplify in H1.
   unhave. repeat (destruct n; try omega).
 Qed.
-Require Import SetoidTactics.
 
 Lemma plus_minus_le x y : x + y - y = x.
 Proof. induction y.
@@ -212,7 +206,7 @@ Qed.
 
 Lemma euclid_mult y `{Have (y > 0)} n : euclid (n * y) y = (n, 0).
 Proof. 
-  induction n. 
+  induction n.
     now rewrite euclid_0.
 
     simp euclid. destruct_call dec. simp euclid. 
@@ -226,8 +220,6 @@ Qed.
 
 Lemma modulo_cancel n y `{Have (y > 0)} : modulo_nat (n * y) y = 0.
 Proof. unfold modulo_nat in *. rewrite euclid_mult. reflexivity. Qed.
-
-Require Import BinPos Pnat.
 
 Equations(nocomp) pow_of_2_positive (n : nat) : positive :=
 pow_of_2_positive O := 1%positive ;
@@ -256,7 +248,6 @@ Lemma pow_of_2_nat_pos n : pow_of_2 n > 0.
 Proof. intros. unfold pow_of_2. auto using lt_O_nat_of_P. Qed.
 Hint Immediate pow_of_2_nat_pos.
 
-Require Import ZArith.
 Open Local Scope Z_scope.
 
 Definition pow_of_2_Z (n : nat) := Zpos (pow_of_2_positive n).
@@ -274,6 +265,10 @@ Lemma pow_of_2_positive_plus n m :
 Proof. induction n ; simpl ; intros ; auto.
   rewrite IHn. reflexivity.
 Qed.
+
+Lemma le_lt_minus_1 x y : (x < y)%nat -> (x <= y - 1)%nat.
+Proof. omega. Qed.
+Hint Resolve le_lt_minus_1 : arith.
 
 Lemma pow_of_2_nat_positive n : pow_of_2 n = nat_of_P (pow_of_2_positive n).
 Proof. reflexivity. Qed.
@@ -416,4 +411,52 @@ Proof. intros p.
   unfold Ple in H. simpl in H.
   apply leS. apply IHp. intro. apply H.
   rewrite <- Pcompare_eq_Gt. auto.
+Qed.
+
+Ltac funelim_call f := on_call f funelim.
+
+Ltac autorewrite_local := repeat
+  match goal with 
+    | [ H : _ = _ |- _ ] => rewrite H in *
+    | [ H : context [ _ = _ ] |- _ ] => rewrite H in *
+  end.
+
+Ltac arith := 
+  try ring_simplify ; [ ring || omega || auto with arith binary ].
+
+Ltac absurd_arith := intros ; elimtype False ; arith.
+
+Instance andb_comm : Commutative andb := andb_comm.
+Instance orb_comm : Commutative orb := orb_comm.
+Instance xorb_comm : Commutative xorb := xorb_comm.
+
+Instance Vbinary_comm {f} `(Commutative bool bool f) n : 
+  Commutative (Vbinary bool f n).
+Proof. intros x y. induction n. simpl. reflexivity.
+  depelim x; depelim y.
+  simpl. rewrite (commutative (f:=f)), IHn. reflexivity.
+Qed.
+
+Ltac crush := 
+  try red; intros; destruct_bool; firstorder.
+
+Instance andb_absorbant : Absorbant andb false.
+Proof. crush. Qed.
+
+Instance andb_neutral : Neutral andb true.
+Proof. crush. Qed.
+
+Instance orb_absorbant : Absorbant orb true.
+Proof. crush. Qed.
+
+Instance orb_neutral : Neutral orb false.
+Proof. crush. Qed.
+
+Require Import Numbers.Natural.Peano.NPeano.
+Import Nat.
+
+Lemma mod_add_ok n m k : (n mod k + m < k -> n mod k + m = (n + m) mod k)%nat.
+Proof. intros. assert (k <> 0%nat) by omega. 
+  rewrite <- add_mod_idemp_l by auto.
+  symmetry. now apply mod_small.
 Qed.

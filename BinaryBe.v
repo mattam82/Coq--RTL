@@ -1,25 +1,5 @@
 Require Import CSDL.Binary.
 
-Class Correctness (cond : Prop) (concl : Prop) :=
-  correctness_prf : impl cond concl.
-
-Notation "'provided' c 'have' t" := (Correctness c t)
-  (only parsing, at level 100, c at next level, t at next level).
-
-Ltac simplify_hyp H :=
-  match type of H with
-    | ?P /\ ?Q => 
-      let freshH := fresh H in
-        destruct H as [H freshH];
-          simplify_hyp H; simplify_hyp freshH
-    | _ => idtac
-  end.
-
-Ltac correct H := 
-  let ty := type of H in
-  let prf := constr:(correctness_prf (cond:=ty)) in
-    rewrite prf in H; simplify_hyp H.
-
 Definition nat_of_bool (b : bool) := if b then 1%nat else 0%nat.
 
 (** * Semantics of an unsigned big-endian vector. *)
@@ -33,10 +13,11 @@ Global Transparent nat_of_binary_be.
 
 Notation " [:  x ] " := (nat_of_binary_be x).
 
-Lemma nat_of_binary_zero n : [: zero (n:=n) ] = 0%nat.
+Lemma nat_of_binary_zero n : [: @zero n ] = 0%nat.
 Proof. induction n ; simpl ; auto. Qed.
 
-Definition one {n} : bits (S n) := vector_append_one (constant_vector n false) true.
+Definition one {n} : bits (S n) := 
+  vector_append_one (constant_vector n false) true.
 
 Lemma nat_of_binary_one n : [: @one n ] = 1%nat.
 Proof. induction n ; simpl ; auto. Qed.
@@ -55,6 +36,7 @@ Proof.
   depelim x. destruct a ; simpl ; autorewrite with pow_of_2; auto with arith. 
 Qed.
 
+Hint Resolve @nat_of_binary_bound : arith.
 Hint Rewrite nat_of_binary_zero nat_of_binary_one nat_of_binary_full : binary.
 
 Lemma nat_of_binary_be_inj n (t t' : bits n) : [: t ] = [: t' ] -> t = t'.
@@ -66,6 +48,7 @@ Proof.
   depelim t. depelim t' ; intros; auto with *.
   simpl in H. destruct a; destruct a0 ; auto;
   try rewrite (IHn t t') by omega ; try reflexivity.
+  
   generalize (nat_of_binary_bound t'). generalize (pow_of_2_pos n). absurd_arith.
   generalize (nat_of_binary_bound t). generalize (pow_of_2_pos n). absurd_arith.
 Qed.
@@ -79,13 +62,14 @@ Instance: Injective (@nat_of_binary_be n) := nat_of_binary_be_inj.
 Lemma nat_of_binary_be_eq_rect m n v (H : m = n) : [: eq_rect m (λ h, bits h) v n H ] = [: v ].
 Proof. subst. simpl. reflexivity. Qed.
 Opaque vector_append.
+Hint Transparent bit : rewrite.
+
 Lemma nat_of_binary_be_vector_append {n m} (v : bits n) (w : bits m) :
   ([: vector_append v w ] = pow_of_2 m * [: v ] + [: w ])%nat.
 Proof. funelim (vector_append v w).
 
   now rewrite mult_comm.
-
-  destruct a; simpl; rewrite H.
+  destruct a; simpl; rewrite H at 1.
     rewrite pow_of_2_plus. ring.
     
     reflexivity.
@@ -133,7 +117,7 @@ Lemma nat_of_binary_be_vector_append_one {n} (b : bits n) c :
 Proof.
   Opaque vector_append_one.
   funelim (vector_append_one b c); simpl. 
-  destruct a0; simpl. rewrite H. ring_simplify. pose (nat_of_binary_bound v). 
+  destruct a0; simpl. rewrite H at 1. ring_simplify. pose (nat_of_binary_bound v). 
   simpl. simp pow_of_2. omega.
   assumption.
 Qed.
@@ -257,7 +241,6 @@ Proof with simpbin; auto. intro.
 Qed.
 
 Hint Rewrite nat_of_binary_binary_of_nat_inverse using solve [ auto ] : binary.
-Ltac funelim_call f := on_call f funelim.
 
 (** * Zero extension *)
 
@@ -271,8 +254,10 @@ Program Definition zx_be {t t'} `{Have (t' >= t)} (c : bits t) : bits t' :=
 Lemma nat_of_zx_zero {m n} (c : bits m) : [: vector_append (@zero n) c ] = [:c].
 Proof. intros. unfold zero. induction n; simp vector_append. Qed.
 
+Hint Transparent bits : rewrite.
+
 Lemma zx_be_correct {t t'} `{Have (t' >= t)} (c : bits t) : [: zx_be c ] = [:c].
-Proof. intros. unfold zx_be. simpbin. omega. Qed.
+Proof. intros. unfold zx_be.  simpbin. omega. Qed.
 
 Hint Rewrite @nat_of_zx_zero @zx_be_correct : binary.
 
@@ -300,9 +285,9 @@ Instance binary_plus_be_correct_full n (t t' : bits n) : forall tt' o,
       else nat_of_binary_be tt' = add'.
 Proof. intros. do 2 red.
   unfold binary_plus_be. funelim_call @vfold_right2.
-  destruct_call_eq @vfold_right2 vfoldvv0. simpdep.
+  destruct_call_eq @vfold_right2 vfoldvv0. simpdep. clear vfoldvv0.
   funelim_call @binary_plus_be_aux.
-  Opaque binary_plus_be_aux add_bits vfold_right2. clear vfoldvv0.
+  Opaque binary_plus_be_aux add_bits vfold_right2. 
   destruct o0; funelim_call add_bits; simp add_bits pow_of_2;
     try rewrite H1; try split ; try omega.
 Qed.
@@ -389,6 +374,7 @@ Lemma minus_plus_lt2 x y z : x > y -> ((x + z) - y) - x = z - y.
 Proof. intros. omega. Qed.
 
 Require Import ROmega.
+Hint Transparent zero one : rewrite.
 
 Instance binary_minus_carry_correct {n} (x y t : bits n) c : 
   provided binary_minus_be_carry x y c = (t, false)
@@ -593,16 +579,8 @@ Transparent binary_shiftl.
 
 Opaque binary_mult_full_be.
 
-Ltac autorewrite_local := repeat
-  match goal with 
-    | [ H : _ = _ |- _ ] => rewrite H in *
-    | [ H : context [ _ = _ ] |- _ ] => rewrite H in *
-  end.
-
 Tactic Notation "rew" "*" := autorewrite with binary in *; autorewrite_local.
 
-Ltac arith := 
-  try ring_simplify ; [ ring || omega || auto with arith ].
 
 Lemma binary_mult_full_be_correct {n m} (x : bits m) (y : bits n) : 
   [: binary_mult_full_be x y ] = [: x ] * [: y ].
@@ -656,7 +634,7 @@ Proof. reduce_goal. funelim (binary_be_le x y).
   destruct a ; simp binary_be_le in *. noconf H0.
 
   depelim z.
-  destruct a; destruct a0; noconf Heq; destruct a1; simp binary_be_le in *.
+  destruct a; destruct a0; noconf Heq; destruct a1; simp binary_be_le in *; simpl in *; auto. 
 Qed.
 
 Lemma binary_be_le_correct {n} (x y : bits n) : if binary_be_le x y then [: x ] <= [: y ]
@@ -714,3 +692,46 @@ Proof. reduce_goal. funelim_call @binary_be_lt.
   rewrite binary_be_le_view_false.
   rewrite Heq. omega.
 Qed.
+
+Inductive binary_be_lt_view {n} (x y : bits n) : bool -> Prop :=
+| binary_be_lt_view_lt : [: x ] < [: y ] -> binary_be_lt_view x y true
+| binary_be_lt_view_ge : [: y ] <= [: x ] -> binary_be_lt_view x y false.
+
+Lemma binary_be_lt_is_view {n} (x y : bits n) : binary_be_lt_view x y (binary_be_lt x y).
+Proof. funelim_call @binary_be_lt. correct Heq. subst. constructor 2. simp binary. arith.
+  correct Heq. destruct (binary_be_le_is_view v y). rewrite Heq in H.
+  constructor 1. omega.
+  constructor. omega.
+Qed.
+
+Require Import Numbers.Natural.Peano.NPeano.
+Import Nat.
+
+Lemma nat_of_vector_split {n k} (x : bits (n + k)) : 
+  let (high, low) := vector_split x in
+    [: x ] = pow_of_2 k * [: high ] + [: low ].
+Proof.
+  funelim (vector_split x).
+  omega. unfold bit in *.
+  destruct (vector_split v). destruct a.
+  simpl. rewrite H. simp pow_of_2. ring.
+
+  rewrite H.
+  simpl. auto.
+Qed.
+
+Lemma modulo_nat_binary {n k} (x : bits (n + k)) : 
+  [: x ] mod pow_of_2 k = [: snd (vector_split x) ].
+Proof.
+  assert (splitx := nat_of_vector_split x). destruct (vector_split x).
+  rewrite splitx.
+  simpl.
+  rewrite mult_comm, plus_comm.
+  rewrite mod_add. rewrite mod_small. 
+  reflexivity. apply nat_of_binary_bound.
+
+  pose (pow_of_2_pos k). omega.
+Qed.
+
+Lemma nat_of_binary_eq {n} (x y : bits n) : [: x ] = [: y ] <-> x = y.
+Proof. split; auto with binary. intros; subst. auto. Qed.

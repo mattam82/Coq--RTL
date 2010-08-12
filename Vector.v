@@ -1,5 +1,6 @@
 Require Import Equations.Equations Program Omega CSDL.Basics.
 Require Export Bvector.
+Require Import Basics.
 
 Delimit Scope vect_scope with vect.
 Bind Scope vect_scope with vector.
@@ -100,7 +101,7 @@ Lemma f_JMequal3 {A B C} (f : Π x : A, B x -> C x) (x y : A) (b : B x) (b' : B 
 Proof. intros. subst. apply f_JMequal2. assumption. Qed.
 
 Lemma vector_append_nil {A n} {v : vector A n} : vector_append v [[]] ~= v.
-Proof. intros. funelim (vector_append v [[]]). 
+Proof. funelim (vector_append v [[]]). 
   apply (f_JMequal3 (@Vcons A a)). fold plus. omega.
   assumption.
 Qed.
@@ -111,3 +112,55 @@ vector_firstn A ?(S n) O (Vcons a n v) Hsl := Vnil ;
 vector_firstn A ?(S n) (S m) (Vcons a n v) Hsl := Vcons a (vector_firstn m v _).
 
   Next Obligation. omega. Defined.
+
+Lemma vector_append_split {A} {n m} (v : vector A (n + m)) : 
+  let (high, low) := vector_split v in
+    v = vector_append high low.
+Proof. funelim (vector_split v). destruct_call @vector_split. subst.
+  reflexivity.
+Qed.
+
+Lemma vector_split_append {A} {n m} (high : vector A n) (low : vector A m) : 
+  vector_split (vector_append high low) = (high, low).
+Proof.
+  Opaque vector_append vector_split.
+  funelim (vector_append high low). simp vector_split. 
+  rewrite H. reflexivity.
+Qed.
+
+Hint Rewrite @vector_split_append : core.
+
+Lemma vector_split_elim_append {A} {n m} (P : vector A (n + m) -> Type)
+  (f : forall high low, P (vector_append high low))
+  (v : vector A (n + m)) : P v.
+Proof. generalize (vector_append_split v). 
+  destruct_call @vector_split. intros. subst. apply f.
+Qed.
+
+Implicit Arguments Vbinary [ [A] [n] ].
+
+Instance Vbinary_absorbant `(Absorbant A f a) n : Absorbant (Vbinary f) (constant_vector n a).
+Proof. intros. intros v. induction v. reflexivity.
+  simp constant_vector. simpl. rewrite IHv. rewrite (absorbant a0). reflexivity.
+Qed.
+
+Instance Vbinary_neutral `(Neutral A f a) n : Neutral (Vbinary f) (constant_vector n a).
+Proof. intros v. induction v. reflexivity. simp constant_vector.
+  simpl. rewrite IHv. rewrite (neutral a0). reflexivity.
+Qed.
+
+Lemma Vbinary_nil {A} (f : A -> A -> A) :
+  Vbinary f Vnil Vnil = Vnil.
+Proof. trivial. Qed.
+
+Lemma Vbinary_cons {A} (f : A -> A -> A) n (a b : A) (x y : vector A n) : 
+  Vbinary f (a |:| x)%vect (b |:| y)%vect = (f a b |:| Vbinary f x y)%vect.
+Proof. trivial. Qed.
+
+Lemma Vbinary_append {A f} {n m} (x x' : vector A n) (y y' : vector A m) : 
+  Vbinary f (vector_append x y) (vector_append x' y') =
+  vector_append (Vbinary f x x') (Vbinary f y y').
+Proof.
+  induction x; depelim x'; auto.  
+  simp vector_append. simpl. now rewrite IHx.
+Qed.

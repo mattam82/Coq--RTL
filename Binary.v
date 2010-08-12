@@ -1,4 +1,6 @@
 Require Export CSDL.Basics CSDL.Vector List Arith Euclid.
+Require Import BoolEq.
+Derive NoConfusion for vector.
 
 Open Local Scope vect_scope.
 
@@ -61,6 +63,25 @@ Proof. funelim (binary_eq b b).
     rewrite bool_eq_refl. simpl ; auto.
 Qed.
 
+Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
+Proof. funelim (binary_eq x y). 
+  
+  rewrite andb_true_iff in H0. 
+  destruct H0 as [Haa0 Hvv0]. specialize (H Hvv0).
+  now (apply bool_eq_ok in Haa0; congruence).
+Qed.
+
+Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
+Proof. funelim (binary_eq x y). 
+  noconf H1. now rewrite bool_eq_refl, binary_eq_refl in H0.
+Qed.
+
+Instance binary_eq_view n (x y : bits n) : PropView (binary_eq x y) (x = y).
+Proof.
+  constructor. intros. now apply binary_eq_eq in H.
+  now (intros -> ; apply binary_eq_refl).
+Qed.
+
 Instance const_eq n : EqDec (bits n) eq.
 Proof. red. unfold Equivalence.equiv. intros. 
   case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
@@ -92,9 +113,9 @@ Ltac do_depelim_nosimpl tac H ::= do_intros H ; try red in H; generalize_eqs H ;
 
 Equations(nocomp) binary_shiftl_n {n} (t : bits n) (m : nat) : bits n * overflow :=
 binary_shiftl_n n t O := (t, false) ;
-binary_shiftl_n n t (S m) <= binary_shiftl t => {
-  binary_shiftl_n n t (S m) (pair t' true) := (t', true) ;
-  binary_shiftl_n n t (S m) (pair t' false) := binary_shiftl_n t' m }.
+binary_shiftl_n n t (S m) with binary_shiftl t := {
+  | pair t' true := (t', true) ;
+  | pair t' false := binary_shiftl_n t' m }.
 
 Equations(nocomp) binary_shiftl_n_full {n} (t : bits n) (m : nat) : bits (m + n) :=
 binary_shiftl_n_full n t O := t ;
@@ -118,21 +139,6 @@ add_bits false false c := (c, false).
 
 Lemma add_bits_correct x y c : add_bits x y c = add_bits_spec x y c.
 Proof. funelim (add_bits x y c); destruct c ; reflexivity. Qed.
-
-Lemma binary_eq_eq {n} {x y : bits n} : binary_eq x y = true -> x = y.
-Proof. funelim (binary_eq x y). 
-  
-  rewrite andb_true_iff in H0. 
-  destruct H0 as [Haa0 Hvv0]. specialize (H Hvv0).
-  now (apply bool_eq_ok in Haa0; congruence).
-Qed.
-
-Require Import BoolEq.
-
-Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
-Proof. funelim (binary_eq x y).
-  noconf H1. now rewrite bool_eq_refl, binary_eq_refl in H0.
-Qed.
 
 Transparent binary_eq.
 
@@ -249,9 +255,66 @@ Lemma binary_inverse_vector_append {n m} (v : bits n) (w : bits m) :
   binary_inverse (vector_append v w) = vector_append (binary_inverse v) (binary_inverse w).
 Proof. Opaque vector_append. 
   funelim (vector_append v w); simp vector_append.
-  now rewrite H. 
+  now rewrite H at 1.
 Qed.
 
 Hint Rewrite @binary_inverse_constant 
   @binary_inverse_involutive 
   @binary_inverse_vector_append : binary.
+
+Opaque Vbinary.
+Hint Rewrite @Vbinary_nil @Vbinary_cons : Vbinary.
+Hint Rewrite @Vbinary_nil @Vbinary_cons : binary.
+
+Lemma BVxor_absorbant n (x : bits n) : BVxor n (constant_vector n true) x = binary_inverse x.
+Proof.
+  induction x; simp binary. simpl. rewrite IHx. reflexivity.
+Qed.
+
+Lemma BVxor_neutral n (x : bits n) : BVxor n (constant_vector n false) x = x.
+Proof.
+  induction x; simp binary. simpl. rewrite IHx. destruct a; reflexivity.
+Qed.
+
+Hint Rewrite BVxor_absorbant BVxor_neutral : binary.
+
+Definition binary_shiftl_n_full_comm {n} (b : bits n) m : bits (n + m) :=
+  vector_append b zero.
+
+Lemma BVand_shiftl_full_comm n k (x : bits (n + k)) : 
+  BVand _ x (binary_shiftl_n_full_comm (@full n) k) = 
+  vector_append (fst (vector_split x)) zero.
+Proof. Opaque BVand vector_append vector_split.
+  funelim (vector_split x).
+  Transparent BVand. unfold binary_shiftl_n_full_comm.
+  simp vector_append. induction x; simpl; auto.
+  rewrite (commutative (f:=andb)). rewrite (absorbant (f:=andb)). 
+  fold (@zero n).
+  rewrite IHx. reflexivity.
+  destruct (vector_split v).
+  unfold BVand. unfold binary_shiftl_n_full_comm in *. unfold full, zero in *.
+  simp constant_vector vector_append in *. simpl. Transparent Vbinary. simpl.
+  rewrite (commutative (f:=andb)). rewrite (neutral (f:=andb)). 
+  unfold BVand in H. setoid_rewrite H. simp vector_append.
+Qed.
+
+Lemma BVor_shiftl_full_comm n k (x : bits (n + k)) : 
+  BVor _ x (binary_shiftl_n_full_comm (@full n) k) = 
+  vector_append (@full n) (snd (vector_split x)).
+Proof. Opaque BVor.
+  funelim (vector_split x). Transparent BVor. unfold binary_shiftl_n_full_comm.
+  simp vector_append. unfold BVor.
+  now setoid_rewrite commutative; setoid_rewrite neutral. unfold bit in *.
+  destruct (vector_split v). unfold binary_shiftl_n_full_comm in *.
+  unfold full, zero in *. simp constant_vector vector_append in *. simpl.
+  rewrite H at 1. 
+  f_equal. auto with *.
+Qed.
+
+Transparent BVand.
+Lemma BVand_inverse {n} (x y : bits n) : 
+  BVand n (binary_inverse x) y = binary_inverse (BVor n x (binary_inverse y)).
+Proof. induction x. now depelim y.
+  depelim y. simpl. rewrite IHx. destruct a; simpl. reflexivity.
+  rewrite negb_involutive. reflexivity.
+Qed.

@@ -61,8 +61,6 @@ Proof. funelim (binary_eq b b).
     rewrite bool_eq_refl. simpl ; auto.
 Qed.
 
-Derive NoConfusion for vector.
-
 Instance const_eq n : EqDec (bits n) eq.
 Proof. red. unfold Equivalence.equiv. intros. 
   case_eq_rew (binary_eq x y) eqxy ; [ left | right ].
@@ -73,8 +71,8 @@ Proof. red. unfold Equivalence.equiv. intros.
     apply bool_eq_ok in eqxy. specialize (H eqv0). congruence.
 
   funelim (binary_eq x y).
-  intro. noconf H0. 
-  rewrite bool_eq_refl, binary_eq_refl in eqxy. discriminate.
+  noconf H0.
+  now rewrite bool_eq_refl, binary_eq_refl in eqxy.
 Qed.
 
 Equations(nocomp) binary_shiftl {n} (t : bits n) : bits n * overflow :=
@@ -133,8 +131,7 @@ Require Import BoolEq.
 
 Lemma binary_eq_neq {n} {x y : bits n} : binary_eq x y = false -> x <> y.
 Proof. funelim (binary_eq x y).
-
-  intro H1; noconf H1. rewrite bool_eq_refl, binary_eq_refl in H0. discriminate.
+  noconf H1. now rewrite bool_eq_refl, binary_eq_refl in H0.
 Qed.
 
 Transparent binary_eq.

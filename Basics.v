@@ -2,8 +2,13 @@ Require Export Arith Program Equations.Equations Have EquivDec.
 Require Import Setoid Morphisms.
 Require Export Relation_Definitions.
 
-Global Set Automatic Introduction.
+Notation "'λ'  x .. y , t" := (fun x => .. (fun y => t) ..)
+  (at level 200, x binder, y binder, right associativity).
 
+Notation "'Π'  x .. y , P" := (forall x, .. (forall y, P) ..)
+  (at level 200, x binder, y binder, right associativity) : type_scope.
+
+Global Set Automatic Introduction.
 Global Generalizable All Variables.
 
 Class Injective {A B} (f : A -> B) :=

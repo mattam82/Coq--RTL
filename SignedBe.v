@@ -88,6 +88,8 @@ Proof.  generalize (pow_of_2_Z_pos (pred n)).  depelim t.
     generalize (Z_of_signed_be_upper_bound_pos t). auto.
 Qed.
 
+Instance: Transitive Zle := Zle_trans.
+
 Instance: Transitive Zge.
 Proof. reduce. 
   rewrite Zge_iff_le in H, H0. assert(z <= x). transitivity y; auto.
@@ -253,8 +255,8 @@ Opaque vfold_right2.
 
 (** Arithmetic operations in terms of unsigned arithmetic operations. 
    Overflow detection actually needs the last two carries for addition, 
-   so we specialize it. *) 
-
+   so we specialize it. *)
+ 
 Equations(nocomp) signed_plus_be {n} (t t' : bits (S n)) : bits (S n) * overflow :=
 signed_plus_be n (Vcons s n t) (Vcons s' _ t') <= binary_plus_be t t' => {
   | pair add carry <= add_bits s s' carry => {
@@ -286,7 +288,7 @@ Hint Rewrite Z_of_nat_minus_inj using auto with binary : Z_of_nat.
 
 (** Signed multiplication correctness. *)
   
-Instance signed_plus_be_correct n (t t' : bits (S n)) tt' : 
+Instance signed_plus_be_correct n (t t' : bits (S n)) tt' :
   provided signed_plus_be t t' = (tt', false)
   have [Z: tt' ] = [Z: t ] + [Z: t' ].
 Proof. intro. 

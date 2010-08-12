@@ -449,8 +449,7 @@ Proof. unfold binary_minus_be. Opaque binary_minus_be_carry bits_succ_be.
   assert(v0 = zero) by (induction n; noconf H);
     subst v0; setoid_rewrite (binary_minus_be_zero n v) in Heq; noconf Heq.
 
-  destruct n; noconf H; simpdep. rewrite (Hind _ Heq).
-  reflexivity.
+  destruct n; noconf H; simpdep. now rewrite (Hind _ H).
 Qed.
 
 Lemma nat_of_binary_one_is_one n (t : bits (S n)) : [: t ] = 1%nat -> t = one.
@@ -472,12 +471,12 @@ Qed.
 Lemma bits_succ_be_zero n : bits_succ_be (@zero (S n)) = (one, 0).
 Proof. 
   funelim (bits_succ_be (@zero (S n))).
-  destruct n. simp bits_succ_be in Heq. 
-  apply bits_succ_be_overflow in Heq. destruct Heq ; subst.
+  destruct n. simp bits_succ_be in H.
+  apply bits_succ_be_overflow in H. destruct H ; subst.
   simplify_IH_hyps. noconf H0.
-  destruct n. simp bits_succ_be in Heq. noconf Heq.
-  simplify_IH_hyps. apply bits_succ_be_correct in Hind. apply bits_succ_be_correct in Heq. 
-  f_equal. apply nat_of_binary_be_inj. simpl. rewrite Heq.
+  destruct n. simp bits_succ_be in H. noconf H.
+  simplify_IH_hyps. apply bits_succ_be_correct in Hind. apply bits_succ_be_correct in H. 
+  f_equal. apply nat_of_binary_be_inj. simpl. rewrite H.
   simpl. setoid_rewrite <- Hind. reflexivity.
 Qed.
 
@@ -642,8 +641,8 @@ Global Transparent vfold_right2 binary_minus_be bits_succ_be nat_of_binary_be.
 Equations(nocomp) binary_be_le {n} (x y : vector bit n) : bool :=
 binary_be_le ?(O) Vnil Vnil := true ;
 binary_be_le ?(S n) (Vcons a n x) (Vcons a' n y) <= xorb a a' => {
-binary_be_le ?(S n) (Vcons a n x) (Vcons a' n y) true := a' ;
-binary_be_le ?(S n) (Vcons a n x) (Vcons a' n y) false := binary_be_le x y }.
+  | true := a' ;
+  | false := binary_be_le x y }.
 
 Instance: BoolReflexive (@binary_be_le n).
 Proof. reduce_goal. funelim (binary_be_le x x); intros ; auto.

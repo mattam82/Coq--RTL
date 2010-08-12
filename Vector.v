@@ -1,4 +1,4 @@
-Require Import Equations.Equations Program Omega.
+Require Import Equations.Equations Program Omega CSDL.Basics.
 Require Export Bvector.
 
 Delimit Scope vect_scope with vect.
@@ -12,6 +12,8 @@ Implicit Arguments Vhead [ [A] [n] ].
 Implicit Arguments Vtail [ [A] [n] ].
 
 Open Local Scope vect_scope.
+
+Derive NoConfusion for vector.
 
 Equations(nocomp) constant_vector {A} (n : nat) (x : A) : vector A n :=
 constant_vector A O x := Vnil ;
@@ -98,7 +100,7 @@ Lemma f_JMequal3 {A B C} (f : Π x : A, B x -> C x) (x y : A) (b : B x) (b' : B 
 Proof. intros. subst. apply f_JMequal2. assumption. Qed.
 
 Lemma vector_append_nil {A n} {v : vector A n} : vector_append v [[]] ~= v.
-Proof. intros. funelim (vector_append v [[]]). reflexivity. 
+Proof. intros. funelim (vector_append v [[]]). 
   apply (f_JMequal3 (@Vcons A a)). fold plus. omega.
   assumption.
 Qed.

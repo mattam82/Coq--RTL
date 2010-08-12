@@ -1,0 +1,17 @@
+Makefile
+*.cm*
+*.[oa]
+*~
+*.d
+*plugin_mod.ml
+*.glob
+*.vo
+*.aux
+*.log
+*.bbl
+*.blg
+*.dvi
+*.pdf
+*.ps
+*.v.tex
+.DS_Store
